@@ -11,11 +11,13 @@ tpl = open(os.path.join(HERE, 'template3.html')).read()
 PROD = {
     'css': 'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css',
     'js': 'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js',
+    'pmtiles': 'https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/dist/pmtiles.js',
     'style': json.dumps('https://tiles.openfreemap.org/styles/positron'),
 }
 TEST = {
     'css': 'vendor/maplibre-gl.css',
     'js': 'vendor/maplibre-gl.js',
+    'pmtiles': 'vendor/pmtiles.js',
     'style': json.dumps({"version": 8, "glyphs": "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
                          "sources": {"empty": {"type": "geojson", "data": {"type": "FeatureCollection", "features": []}}},
                          "layers": [{"id": "bg", "type": "background", "paint": {"background-color": "#EDEAE3"}},
@@ -24,7 +26,8 @@ TEST = {
 
 def build(cfg):
     return (tpl.replace('%%DATA%%', json.dumps(meta, separators=(',', ':')))
-               .replace('%%MAPLIBRE_CSS%%', cfg['css']).replace('%%MAPLIBRE_JS%%', cfg['js']).replace('%%STYLE%%', cfg['style']))
+               .replace('%%MAPLIBRE_CSS%%', cfg['css']).replace('%%MAPLIBRE_JS%%', cfg['js'])
+               .replace('%%PMTILES_JS%%', cfg['pmtiles']).replace('%%STYLE%%', cfg['style']))
 
 open(os.path.join(HERE, 'index.html'), 'w').write(build(PROD))
 open(os.path.join(HERE, 'test_index.html'), 'w').write(build(TEST).replace('<script>\nconst META', '<script>window.__NO_TEXT__=true;</script>\n<script>\nconst META'))

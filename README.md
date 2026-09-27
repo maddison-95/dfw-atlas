@@ -1,4 +1,4 @@
-# DFW Neighborhood Atlas — site bundle (v12: aerial imagery, street-level detail, Street View)
+# DFW Neighborhood Atlas — site bundle (v13: self-hosted parcel data)
 
 This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and the scripts
 that refresh the data (mostly run automatically by GitHub Actions).
@@ -14,10 +14,13 @@ data/atlas.json          a slimmer neighborhood list the refresh scripts read �
 data/housing.json        home values, rents, sales, Census figures — written by scripts/refresh_housing.py
 data/schools.json        schools with level, type, location, TEA rating — written by scripts/refresh_schools.py
 data/lot_stats.json      median lot size/value/home age per neighborhood — written by scripts/refresh_lots.py
-data/config.json         site keys read on load (currently: Esri key for aerial imagery) — edit on GitHub, no rebuild
+data/config.json         site keys read on load (Esri key for aerial imagery; self-hosted parcel-tiles URL) —
+                          edit on GitHub, no rebuild
 data/rate.json           the rate / down payment / tax / insurance assumptions behind the payment estimate —
                           EDIT THIS ON GITHUB WHEN RATES MOVE (no code change needed)
 data-sources/            the two files you download by hand (TEA ratings, NCES private schools)
+scripts/build_parcels.py builds the self-hosted parcel-tiles data (README section 7); run by the
+                          "Refresh parcel data" Action, not something you run by hand
 scripts/                 the refresh scripts
 .github/workflows/       the automated refresh jobs (GitHub Actions)
 internal-lending/        a SEPARATE, registration-gated (name/email/mobile + captcha), non-public page for
@@ -28,6 +31,20 @@ internal-lending/worker/register.js   the Cloudflare Worker source that checks t
                           each registration — deploy it per internal-lending/README.md's setup steps.
 robots.txt               tells search engines to skip internal-lending/
 ```
+
+## What's new in v13
+
+* **Self-hosted parcel data (optional).** The "Lot lines & sizes" layer has always queried a live,
+  third-party feed (TxGIO StratMap) once per pan/zoom -- reliable enough day to day, but that means a
+  visitor's map depends on a third party's uptime and rate limits, and a busy block can hit that server's
+  ~2,000-parcel cap ("zoom in more"). A new **"Refresh parcel data" Action** (`scripts/build_parcels.py` +
+  `.github/workflows/refresh_parcels.yml`) pulls the same feed for the five DFW counties once, quarterly, and
+  publishes it as a single self-hosted file on this repo's own GitHub Release -- no new account, no cost.
+  Nothing changes until you opt in: see section 7 below. The live feed keeps working exactly as before either
+  way; this is a faster, more resilient alternative sitting next to it, not a replacement that could break
+  something.
+* Vendored `pmtiles.js` (the small reader library that makes a self-hosted, static `.pmtiles` file behave
+  like a live map layer, via plain byte-range HTTP requests) alongside the existing MapLibre files.
 
 ## What's new in v12
 * **Aerial view** chip: Esri World Imagery under the streets from ~z12 (free key, 2M tiles/month; setup in
@@ -256,6 +273,34 @@ and you can set a hard budget cap there.
 **Also new at street level:** building footprints are readable from z14, house numbers appear from z17, and
 every lot popup has **Street View ↗ / Google Maps ↗ / Search address ↗** links — those are plain Google Maps
 links (no key, no cost) that open the lot in Street View or Google Maps in a new tab.
+
+## 7. Self-hosted parcel data (optional, ~2 minutes once the workflow has run)
+
+The **"Lot lines & sizes"** layer has, since v1, queried a live third-party feed (the Texas Geographic
+Information Office's statewide parcel service, which is itself built from the five county appraisal
+districts' own rolls) once per pan or zoom. That's kept working fine, but it does mean a visitor's map leans
+on that service's uptime and its ~2,000-parcel-per-request cap, and every visitor re-downloads the same lines
+for a popular area instead of it being cached anywhere.
+
+A **"Refresh parcel data" Action** now exists to build a self-hosted alternative: it pulls that same feed
+once (for Dallas, Collin, Denton, Tarrant and Rockwall counties), tiles it, and publishes the result as a
+single file on this repo's own GitHub Release — no new account, no cost, nothing beyond what you already
+have. It runs automatically every quarter (appraisal rolls barely change month to month), or any time from
+the **Actions** tab → **Refresh parcel data (self-hosted lots)** → **Run workflow** (tick "Dry run" first if
+you just want to sanity-check the county/field matching without publishing anything).
+
+**Turning it on** (skip this entirely and the map keeps using the live feed, exactly as before):
+1. Let the workflow run once (it's on a schedule, or trigger it by hand from the Actions tab).
+2. Open its log (or the repo's **Releases** page → the `parcels-data` release → the `.pmtiles` asset) and
+   copy the asset's download URL.
+3. Edit `data/config.json` (GitHub web editor is fine): paste that URL between the quotes of
+   `"parcels_pmtiles_url": ""`. Commit. No rebuild needed — the page reads that file on load.
+4. Reload the map and zoom into any neighborhood — lot lines now come from the self-hosted snapshot instead
+   of the live query, and the lot popup's footer says so. The live feed is still there as the fallback if the
+   self-hosted file is ever unreachable (a browser-console warning says so if that happens).
+
+Nothing needs re-pasting after the first time: the workflow replaces the same release each quarter, so the
+URL in `data/config.json` keeps pointing at the current data automatically.
 
 ## Attribution shown on the page
 Basemap © OpenStreetMap contributors, served by OpenFreeMap. Zip areas: U.S. Census ZCTA. Home values and rents:

@@ -6,6 +6,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap">
 <link rel="stylesheet" href="%%MAPLIBRE_CSS%%">
 <script src="%%MAPLIBRE_JS%%"></script>
+<script src="%%PMTILES_JS%%"></script>
 <style>
 :root{
   --ground:#EEF0EC; --panel:#FFFFFF; --panel2:#F5F6F3; --ink:#1F1B16; --ink2:#5E5A53; --line:#DCDED8;
@@ -188,7 +189,7 @@ input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-
 
     <aside class="panel" id="panel" aria-live="polite">
       <div id="panelInner"></div>
-      <div class="legalese">Equal Housing Lender. Michael Addison, NMLS #603214, The Federal Savings Bank. Neighborhood shapes are a stylized index, not legal boundaries; confirm zip, school assignment and taxes by address. Payment figures, when shown, are estimates. Basemap © OpenStreetMap contributors, via OpenFreeMap. Parcel lines and sizes: county appraisal districts via the Texas Geographic Information Office (StratMap).</div>
+      <div class="legalese">Equal Housing Lender. Michael Addison, NMLS #603214, The Federal Savings Bank. Neighborhood shapes are a stylized index, not legal boundaries; confirm zip, school assignment and taxes by address. Payment figures, when shown, are estimates. Basemap © OpenStreetMap contributors, via OpenFreeMap. Parcel lines and sizes: county appraisal districts via the Texas Geographic Information Office (StratMap), live or a self-hosted quarterly snapshot of the same feed.</div>
     </aside>
   </div>
 </div>
@@ -216,8 +217,11 @@ const byGid = {}; AREA_ORDER.forEach(k=> META.areas[k].neighborhoods.forEach(h=>
 let layer = 'hood', regionFilter = null, selected = null, tab = 'overview', showBuild = false, showSchools = true;
 let hoverGid = null, geoLoaded = false, showLots = true, lotsBusy = null, lotsKey = '', hoverLot = null;
 let showAerial = false;
-// data/config.json (edit on GitHub, no rebuild): { "esri_api_key": "..." } enables the aerial-imagery toggle
-const KEYS = { esri: '' };
+// data/config.json (edit on GitHub, no rebuild): { "esri_api_key": "..." } enables the aerial-imagery toggle;
+// { "parcels_pmtiles_url": "..." } (filled in automatically by the parcels workflow's PR, or pasted in by hand)
+// switches the 'lots' source from a live per-pan TxGIO query to a self-hosted static snapshot -- see switchLotsToStatic()
+const KEYS = { esri: '', parcelsUrl: '' };
+let staticParcelsActive = false;   // true once the self-hosted parcel tiles (if configured) are wired up
 // Esri World Imagery via ArcGIS Location Platform (2M tiles/month free). Attribution text is required by Esri's terms.
 const AERIAL_TILES = key => `https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${encodeURIComponent(key)}`;
 const AERIAL_ATTRIB = 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community · Powered by Esri';
@@ -234,6 +238,9 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl({showCompass:false}), 'top-right');
 map.touchZoomRotate.disableRotation(); map.dragRotate.disable();
+// Self-hosted parcel tiles (PMTiles) ship as a single static file with HTTP range-request reads --
+// no server needed. Registering the protocol is a no-op until a pmtiles:// source is actually added.
+if(window.pmtiles){ try{ const protocol = new pmtiles.Protocol(); maplibregl.addProtocol('pmtiles', protocol.tile); }catch(e){ console.warn('pmtiles unavailable', e); } }
 
 function hoodGeoPrep(geo){
   geo.hoods.features.forEach(f=>{ const p=f.properties; const r=META.areas[p.area].regions[p.region]; p.color = r ? r.color : '#999'; });
@@ -376,23 +383,75 @@ function addLayers(geo){
   if(TEXT) map.addLayer({id:'schools-label', type:'symbol', source:'schools', minzoom: 13, layout:{
     'text-field':['get','name'], 'text-font':FONT_REG, 'text-size':['interpolate',['linear'],['zoom'],13,10,16,13], 'text-offset':[0,1.1], 'text-anchor':'top', 'text-max-width': 10, 'text-optional': true
   }, paint:{'text-color':'#2A2622','text-halo-color':'rgba(255,255,255,.9)','text-halo-width':1.4}}, TEXT && map.getLayer('hoods-label') ? 'hoods-label' : placeId);
-  // lots (parcels) — loaded on demand for the visible area once zoomed in
+  // lots (parcels) — loaded on demand for the visible area once zoomed in; drawn above the neighborhood
+  // tint (but below its outline) so lot lines are never washed out by it
+  liveLotsLayers();
+  applySchoolFilter();
+  wireMap();
+  geoLoaded = true;
+  trySetupStaticParcels();   // in case data/config.json's parcels_pmtiles_url already resolved before geo.json did
+  loadLots();
+}
+// ---------- lots
+// Two ways the 'lots' source gets its data, same layer ids and click/hover/popup code either way:
+//  1) default -- an empty geojson source, filled in per-viewport by loadLots() querying the live TxGIO feed
+//  2) self-hosted -- once data/config.json names a parcels_pmtiles_url, switchLotsToStatic() swaps the SAME
+//     'lots' source for a static vector-tile source built by scripts/build_parcels.py + the parcels workflow.
+//     Vector tiles render themselves as you pan/zoom, so loadLots() becomes a no-op and every county's data
+//     -- including ones with no live query service of their own -- comes from one already-proven feed
+//     (TxGIO StratMap, the same source the live path already used), just refreshed quarterly instead of live.
+function liveLotsLayers(){   // the default: an empty geojson source, filled per-viewport by loadLots()
   map.addSource('lots', {type:'geojson', data:{type:'FeatureCollection', features:[]}, promoteId:'prop_id'});
-  // drawn above the neighborhood tint (but below its outline) so lot lines are never washed out by it
   map.addLayer({id:'lots-fill', type:'fill', source:'lots', minzoom: LOTS_MINZOOM, paint:{
     'fill-color':'#1F1B16', 'fill-opacity': ['case', ['boolean',['feature-state','hover'],false], 0.14, 0.01]
   }}, 'hoods-line');
   map.addLayer({id:'lots-line', type:'line', source:'lots', minzoom: LOTS_MINZOOM, paint:{
     'line-color':'#6B5E4E', 'line-width': ['interpolate',['linear'],['zoom'], 15, 0.5, 17, 1, 19, 1.6], 'line-opacity': 0.75
   }}, 'hoods-line');
-  applySchoolFilter();
-  wireMap();
-  geoLoaded = true;
-  loadLots();
 }
-// ---------- lots
+let parcelsFallbackDone = false;   // only auto-revert once per page load -- avoids a retry loop if the file stays down
+function revertToLiveLots(){
+  if(!staticParcelsActive || parcelsFallbackDone) return;
+  parcelsFallbackDone = true;
+  console.warn('self-hosted parcel tiles unreachable -- reverting to the live TxGIO feed for this session');
+  ['lots-fill','lots-line'].forEach(id=>{ if(map.getLayer(id)) map.removeLayer(id); });
+  if(map.getSource('lots')) map.removeSource('lots');
+  liveLotsLayers();
+  ['lots-fill','lots-line'].forEach(id=> map.setLayoutProperty(id,'visibility', showLots?'visible':'none'));
+  staticParcelsActive = false;
+  const t=document.getElementById('lotToggle'); if(t) t.title='Show property lines when zoomed in; click a lot for size in acres, square feet and approximate dimensions';
+  lotsKey = ''; setLotsHint(''); loadLots();
+}
+function switchLotsToStatic(url){
+  if(staticParcelsActive || !map.getSource('lots')) return;
+  try{
+    ['lots-fill','lots-line'].forEach(id=>{ if(map.getLayer(id)) map.removeLayer(id); });
+    map.removeSource('lots');
+    map.addSource('lots', {type:'vector', url:'pmtiles://'+url, promoteId:{lots:'prop_id'}});
+    map.addLayer({id:'lots-fill', type:'fill', source:'lots', 'source-layer':'lots', minzoom: LOTS_MINZOOM, paint:{
+      'fill-color':'#1F1B16', 'fill-opacity': ['case', ['boolean',['feature-state','hover'],false], 0.14, 0.01]
+    }}, 'hoods-line');
+    map.addLayer({id:'lots-line', type:'line', source:'lots', 'source-layer':'lots', minzoom: LOTS_MINZOOM, paint:{
+      'line-color':'#6B5E4E', 'line-width': ['interpolate',['linear'],['zoom'], 15, 0.5, 17, 1, 19, 1.6], 'line-opacity': 0.75
+    }}, 'hoods-line');
+    ['lots-fill','lots-line'].forEach(id=> map.setLayoutProperty(id,'visibility', showLots?'visible':'none'));
+    staticParcelsActive = true;
+    // if the self-hosted file 404s, is malformed, or the release is ever deleted, fall back to the live feed
+    // rather than leaving the layer permanently empty for the rest of the visit
+    map.on('error', e=>{ if(staticParcelsActive && (e.sourceId==='lots' || (e.error && /pmtiles|PMTiles/.test(String(e.error.message||e.error))))) revertToLiveLots(); });
+    const t=document.getElementById('lotToggle'); if(t) t.title='Show property lines when zoomed in; click a lot for size in acres, square feet and approximate dimensions. Self-hosted snapshot, refreshed quarterly.';
+    if(lotsVisible()) setLotsHint('Parcel lines · self-hosted snapshot');
+  }catch(e){ console.warn('static parcel tiles unavailable, staying on the live TxGIO feed', e); staticParcelsActive=false; }
+}
+function trySetupStaticParcels(tries){
+  tries = tries || 0;
+  if(staticParcelsActive || !KEYS.parcelsUrl) return;
+  if(map.getSource('lots')) switchLotsToStatic(KEYS.parcelsUrl);
+  else if(tries < 100) setTimeout(()=>trySetupStaticParcels(tries+1), 300);
+}
 function lotsVisible(){ return showLots && map.getZoom() >= LOTS_MINZOOM; }
 async function loadLots(){
+  if(staticParcelsActive) return;   // vector tiles render themselves; nothing to fetch per pan
   if(!map.getSource('lots')) return;
   if(!lotsVisible()){ setLotsHint(''); return; }
   const b = map.getBounds(); const pad = 0.0015;
@@ -463,7 +522,7 @@ function lotPopupHTML(p, geom){
       ${p.legal_desc?`<span style="color:#5E5A53">Legal</span><span style="font-size:11px">${esc(p.legal_desc)}</span>`:''}
     </div>
     ${links}
-    <small style="margin-top:6px">${esc(p.county||'')} County appraisal district via TxGIO StratMap${p.geo_id?' · '+esc(p.geo_id):''}. Dimensions are estimated from the parcel outline; verify with a survey.</small>`;
+    <small style="margin-top:6px">${esc(p.county||'')} County appraisal district via TxGIO StratMap${p.geo_id?' · '+esc(p.geo_id):''}${staticParcelsActive?' (self-hosted snapshot, refreshed quarterly)':''}. Dimensions are estimated from the parcel outline; verify with a survey.</small>`;
 }
 function firstSymbolLayer(){ const ls = map.getStyle().layers; const s = ls.find(l=> l.type==='symbol'); return s ? s.id : undefined; }
 let hoodsSourceData = null;
@@ -698,7 +757,11 @@ function renderTab(h){
 
 // ---------- external data (published alongside the page)
 async function loadData(){
-  try{ const r = await fetch('data/config.json'); if(r.ok){ const c = await r.json(); if(c.esri_api_key && !/^%%|YOUR/.test(c.esri_api_key)) KEYS.esri = String(c.esri_api_key).trim(); const t=document.getElementById('aerialToggle'); if(t && KEYS.esri) t.title='Satellite/aerial imagery under the streets once zoomed in (Esri World Imagery)'; } }catch(e){}
+  try{ const r = await fetch('data/config.json'); if(r.ok){ const c = await r.json();
+    if(c.esri_api_key && !/^%%|YOUR/.test(c.esri_api_key)) KEYS.esri = String(c.esri_api_key).trim();
+    const t=document.getElementById('aerialToggle'); if(t && KEYS.esri) t.title='Satellite/aerial imagery under the streets once zoomed in (Esri World Imagery)';
+    if(c.parcels_pmtiles_url && !/^%%|YOUR/.test(c.parcels_pmtiles_url)){ KEYS.parcelsUrl = String(c.parcels_pmtiles_url).trim(); trySetupStaticParcels(); }
+  } }catch(e){}
   try{ const r = await fetch('data/rate.json'); if(r.ok){ const c = await r.json(); ['rate','down','taxRate','insRate'].forEach(k=>{ if(typeof c[k]==='number') CONFIG[k]=c[k]; }); if(c.asof) CONFIG.asofRate = String(c.asof); } }catch(e){}
   try{ const r = await fetch('data/housing.json'); if(r.ok) HOUSING = await r.json(); }catch(e){}
   try{ const r = await fetch('data/schools.json'); if(r.ok) SCHOOLS = await r.json(); }catch(e){}

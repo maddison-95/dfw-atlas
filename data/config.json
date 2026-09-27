@@ -1,4 +1,5 @@
 {
-  "_comment": "Site keys the page reads on load. Edit on GitHub; no rebuild needed. esri_api_key: an ArcGIS Location Platform API key with the Basemaps privilege, restricted to your site's domain -- enables the 'Aerial view' toggle (README section 6). Leave empty to hide imagery.",
-  "esri_api_key": ""
+  "_comment": "Site keys the page reads on load. Edit on GitHub; no rebuild needed. esri_api_key: an ArcGIS Location Platform API key with the Basemaps privilege, restricted to your site's domain -- enables the 'Aerial view' toggle (README section 6). Leave empty to hide imagery. parcels_pmtiles_url: the download URL of the self-hosted parcel tiles built by the 'Refresh parcel data' workflow (README section 7) -- once the workflow has run at least once, copy the .pmtiles asset URL from the repo's 'parcels-data' release here to switch the map from live per-click parcel lookups to a faster, more reliable static snapshot. Leave empty to keep using the live feed.",
+  "esri_api_key": "",
+  "parcels_pmtiles_url": ""
 }
