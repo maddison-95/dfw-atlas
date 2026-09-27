@@ -1,19 +1,39 @@
-# DFW Neighborhood Atlas — site bundle (v5: lot stats on hover + better zoom)
+# DFW Neighborhood Atlas — site bundle (v6: full 5-county coverage)
 
-This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and three scripts
-that refresh the data (run automatically once a month by GitHub Actions).
+This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and the scripts
+that refresh the data (mostly run automatically by GitHub Actions).
 
 ```
-index.html               the interactive map (all six areas) on a real OpenStreetMap basemap
-data/geo.json            the stylized neighborhood + zip shapes (generated, don't edit)
-data/atlas.json          the neighborhood list the scripts read (zips, names) — generated, don't edit
+index.html               the interactive map, generated from template3.html + data/areas_meta.json — don't
+                          hand-edit; edit those two and run assemble3.py (or ask Claude to)
+template3.html           the page's actual source code (HTML/CSS/JS in one file)
+assemble3.py             builds index.html from template3.html + data/areas_meta.json
+data/geo.json            neighborhood + zip shapes, in real map coordinates (generated, don't edit)
+data/areas_meta.json     the neighborhood list with all its panel content (generated, don't edit)
+data/atlas.json          a slimmer neighborhood list the refresh scripts read — generated, don't edit
 data/housing.json        home values, rents, sales, Census figures — written by scripts/refresh_housing.py
 data/schools.json        schools with level, type, location, TEA rating — written by scripts/refresh_schools.py
 data/lot_stats.json      median lot size/value/home age per neighborhood — written by scripts/refresh_lots.py
 data-sources/            the two files you download by hand (TEA ratings, NCES private schools)
 scripts/                 the refresh scripts
-.github/workflows/       the monthly auto-refresh (GitHub Actions)
+.github/workflows/       the automated refresh jobs (GitHub Actions)
 ```
+
+## What's new in v6
+* **Full coverage of all 5 counties.** Every incorporated city and named community in Dallas, Collin, Denton,
+  Tarrant and Rockwall counties is now on the map, not just the six hand-picked areas from before — a few
+  hundred additional shapes, added automatically from Census's own city boundaries (not hand-drawn), with zip
+  code(s) and school district worked out by overlaying those boundaries on Census's zip and school-district
+  maps. They show up in whichever of the 6 areas they're geographically closest to, under a new "More nearby
+  cities" legend chip, so the existing hand-curated neighborhoods (Lakewood, Southlake, etc.) aren't disturbed.
+  **Honest caveat:** nobody's reviewed each of these 150+ new places individually, so unlike the original set
+  they start with no price tier, no build-activity tag, and a generic one-line description instead of a
+  written blurb — the panel says so plainly. Price tier fills in on its own once the monthly refresh has zip
+  data for it; district is a best-match spatial estimate (labeled as such — always confirm by address, same as
+  everywhere else on this map). Run **Actions → "Add full county coverage" → Run workflow** to build this the
+  first time; see the new section below. It's a one-time (or occasional) job, not part of the monthly refresh
+  — a full 5-county build downloads and processes ~150-250MB of Census map data, which would be wasteful to
+  repeat every month for boundaries that rarely change.
 
 ## What's new in v5
 * **Hovering a neighborhood now shows numbers**, not just its name: zip code(s), a median home price, a median
@@ -80,7 +100,18 @@ scripts/                 the refresh scripts
    `python scripts/refresh_housing.py --census-key KEY --redfin zip_code_market_tracker.tsv000.gz`, then commit
    the new `data/housing.json`. (The file is ~1 GB, so it is not automated.)
 
-## 3. Yearly: replace the two hand-downloaded school files
+## 3. Full 5-county coverage (one-time, or whenever you want to redo it)
+
+**Actions** tab → **"Add full county coverage"** → **Run workflow**. It downloads Census's own city, zip-code
+and school-district boundary files, adds every incorporated place in Dallas, Collin, Denton, Tarrant and
+Rockwall counties that isn't already on the map (skipping anything whose name already exists, so your
+hand-tuned Dallas/Richardson/Plano/Frisco/McKinney/Southlake/Rockwall neighborhoods are never touched or
+duplicated), works out each new place's zip code(s) and school district by overlaying it on Census's own zip
+and district maps, and rebuilds `index.html` so the new places show up in the side panel and search, not just
+as shapes on the map. Takes 10-20 minutes (it's processing a few hundred megabytes of map data). Safe to
+re-run later — it only adds places that aren't already there.
+
+## 4. Yearly: replace the two hand-downloaded school files
 
 * `data-sources/tea_ratings.csv` — TEA → Accountability → Data Downloads → Report level **Campus**, category
   Accountability Summary, element "Accountability Rating & Overall Score", CSV. New ratings come out each August.
@@ -90,11 +121,14 @@ scripts/                 the refresh scripts
 Drop the new files in with the same names, commit, and run the workflow. If a column name changes, edit the
 `COLS` table at the top of `scripts/refresh_schools.py`.
 
-## 4. Editing the map itself
+## 5. Editing the map itself
 
-Neighborhood names, zips, tiers, build tags and region colors live in the generator project (areas.py,
-neighborhoods_seed.py). Send edits and a new index.html + data/geo.json are generated; the other data files don't
-change.
+The ~236 hand-curated Dallas-area neighborhoods (names, zips, tiers, build tags, region colors, blurbs) live in
+a separate generator project, not in this folder — send edits and a new `data/geo.json` +
+`data/areas_meta.json` are generated here, then `assemble3.py` rebuilds `index.html`. The 150+ auto-added
+places from full county coverage (section 3) can be hand-edited directly in `data/areas_meta.json` (to add a
+blurb, price tier or build tag once you know it) — just also update the matching entry in `data/geo.json`'s
+`hoods` list (same `name`), then run `python assemble3.py` and commit.
 
 ## Attribution shown on the page
 Basemap © OpenStreetMap contributors, served by OpenFreeMap. Zip areas: U.S. Census ZCTA. Home values and rents:

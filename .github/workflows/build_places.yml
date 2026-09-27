@@ -1,0 +1,25 @@
+name: Add full county coverage (manual, occasional)
+on:
+  workflow_dispatch: {}   # "Run workflow" button in the Actions tab -- this one you run by hand, not on a schedule
+permissions:
+  contents: write
+jobs:
+  build_places:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install geometry libraries
+        run: pip install pyshp shapely
+      - name: Add every incorporated place in the 5 counties
+        run: python scripts/build_places.py
+      - name: Rebuild index.html with the new places
+        run: python assemble3.py
+      - name: Commit if changed
+        run: |
+          git config user.name "atlas-bot"
+          git config user.email "atlas-bot@users.noreply.github.com"
+          git add data/geo.json data/areas_meta.json data/atlas.json index.html
+          git diff --cached --quiet || git commit -m "Add full 5-county place coverage"
+          git push
