@@ -189,7 +189,7 @@ input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-
 
     <aside class="panel" id="panel" aria-live="polite">
       <div id="panelInner"></div>
-      <div class="legalese">Equal Housing Lender. Michael Addison, NMLS #603214, The Federal Savings Bank. Neighborhood shapes are a stylized index, not legal boundaries; confirm zip, school assignment and taxes by address. Payment figures, when shown, are estimates. Basemap © OpenStreetMap contributors, via OpenFreeMap. Parcel lines and sizes: county appraisal districts via the Texas Geographic Information Office (StratMap), live or a self-hosted quarterly snapshot of the same feed.</div>
+      <div class="legalese">Equal Housing Lender. Michael Addison, NMLS #603214, The Federal Savings Bank. Town limits are drawn from Census TIGER; neighborhood lines follow county plat records where the boundary rebuild has run and are otherwise an index; confirm zip, school assignment and taxes by address. Payment figures, when shown, are estimates. Basemap © OpenStreetMap contributors, via OpenFreeMap. Parcel lines and sizes: county appraisal districts via the Texas Geographic Information Office (StratMap), live or a self-hosted quarterly snapshot of the same feed.</div>
     </aside>
   </div>
 </div>
@@ -370,7 +370,8 @@ function addLayers(geo){
   // from z10.5 only (below that the city names carry the map); below city/town names, above street names
   if(TEXT) map.addLayer({id:'hoods-label', type:'symbol', source:'hoods', minzoom: 10.5, layout:{
     'text-field':['get','name'], 'text-font':FONT, 'symbol-sort-key':['-',0,['get','sqmi']],
-    'text-size':['interpolate',['linear'],['zoom'], 10.5, 10, 11.5, 12.5, 13, 18, 15, 24],
+    // plat-level units (kind 'plat': a platted subdivision no marketing name covers) label only from z14, smaller
+    'text-size':['interpolate',['linear'],['zoom'], 10.5, ['case',['==',['get','kind'],'plat'],0,10], 13, ['case',['==',['get','kind'],'plat'],0,18], 14, ['case',['==',['get','kind'],'plat'],9,20], 15, ['case',['==',['get','kind'],'plat'],11,24]],
     'text-max-width': 8, 'text-padding': 6, 'text-letter-spacing': 0.02
   }, paint:{'text-color':'#2A2622','text-halo-color':'rgba(255,255,255,.85)','text-halo-width':1.8,
     'text-opacity': ['case', ['boolean',['feature-state','dim'],false], 0.25, 1]}}, placeId);
@@ -747,8 +748,8 @@ function renderPanel(){
 function renderTab(h){
   const b = document.getElementById('tabBody');
   if(tab==='overview'){
-    b.innerHTML = `<p>${esc(h.blurb||'A neighborhood in the '+REGIONS[h.region].name+' area.')}</p>
-      <dl class="kv"><dt>Part of town</dt><dd>${esc(REGIONS[h.region].name)}</dd><dt>Zip code${h.zips.length>1?'s':''}</dt><dd>${h.zips.join(', ')}</dd><dt>School district</dt><dd>${esc(district(h)).split(' — ')[0]}</dd><dt>Price tier</dt><dd>${TIERS[h.tier]||'—'}</dd><dt>Build activity</dt><dd>${BUILDS[h.build]||'—'}</dd><dt>Map area (approx.)</dt><dd>${h.sqmi} sq mi</dd></dl>
+    b.innerHTML = `<p>${esc(h.blurb||(h.kind==='plat'?'A platted subdivision in '+(h.city||REGIONS[h.region].name)+', drawn from county plat records; no separate write-up yet.':h.kind==='town'?'The town of '+h.name+', drawn to its legal limits.':'A neighborhood in the '+REGIONS[h.region].name+' area.'))}</p>
+      <dl class="kv">${h.city?`<dt>City / town</dt><dd>${esc(h.city)}</dd>`:''}<dt>Part of town</dt><dd>${esc(REGIONS[h.region].name)}</dd><dt>Zip code${h.zips.length>1?'s':''}</dt><dd>${h.zips.join(', ')}</dd><dt>School district</dt><dd>${esc(district(h)).split(' — ')[0]}</dd><dt>Price tier</dt><dd>${TIERS[h.tier]||'—'}</dd><dt>Build activity</dt><dd>${BUILDS[h.build]||'—'}</dd><dt>Area</dt><dd>${h.sqmi} sq mi${h.lots?` · ${h.lots.toLocaleString()} lots`:''}</dd></dl>
       <div class="note">${(h.tier||h.build)?`<b>Build note:</b> tier and activity are a starting classification from local knowledge, to be confirmed against city permit data. Home values, sales pace, people and school ratings fill in from the data feeds.`:`<b>Note:</b> this city was added automatically from Census boundaries; school district is a best-match spatial estimate (confirm by address) and price tier / build activity haven't been classified yet. Home values, sales pace, people and school ratings fill in from the data feeds once its zip is covered.`}</div>`;
   } else if(tab==='schools'){ renderSchools(h, b); }
   else if(tab==='people'){ renderPeople(h, b); }
