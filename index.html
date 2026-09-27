@@ -213,7 +213,7 @@ let layer = 'hood', regionFilter = null, selected = null, tab = 'overview', show
 let hoverGid = null, geoLoaded = false, showLots = true, lotsBusy = null, lotsKey = '', hoverLot = null;
 let schoolLevel = 'ES', schoolTypes = {public:true, magnet:true, charter:true, private:true};
 const CONFIG = { rate: 6.5, down: 20, taxRate: 2.2, insRate: 0.5, asofRate: '2026-09' };
-let HOUSING = {asof:null, zips:{}, neighborhoods:{}}, SCHOOLS = {asof:null, schools:[]};
+let HOUSING = {asof:null, zips:{}, neighborhoods:{}}, SCHOOLS = {asof:null, schools:[]}, LOTS = {asof:null, zips:{}, neighborhoods:{}};
 
 // ---------- map
 const map = new maplibregl.Map({
@@ -384,7 +384,7 @@ function wireMap(){
     hoverGid = f.id; map.setFeatureState({source:'hoods', id:hoverGid}, {hover:true});
     map.getCanvas().style.cursor='pointer';
     const p = f.properties; const r = META.areas[p.area].regions[p.region];
-    tip.innerHTML = `${esc(p.name)}<small>${esc(r?r.name:'')} · ${JSON.parse(p.zips).join(', ')}</small>`;
+    tip.innerHTML = `${esc(p.name)}<small>${esc(r?r.name:'')} · ${JSON.parse(p.zips).join(', ')}</small>${tipStatsHTML(p)}`;
     tip.style.display='block'; tip.style.left=e.point.x+'px'; tip.style.top=e.point.y+'px';
   });
   map.on('mouseleave', 'hoods-fill', ()=>{ if(hoverGid!==null) map.setFeatureState({source:'hoods', id:hoverGid}, {hover:false}); hoverGid=null; map.getCanvas().style.cursor=''; tip.style.display='none'; });
@@ -409,6 +409,19 @@ function wireMap(){
     new maplibregl.Popup({offset:6, maxWidth:'320px'}).setLngLat(e.lngLat).setHTML(lotPopupHTML(f.properties, f.geometry)).addTo(map); });
 }
 function fitBBox(b, opts){ map.fitBounds([[b[0],b[1]],[b[2],b[3]]], Object.assign({padding:{top:40,bottom:40,left:40,right:40}, duration:700, maxZoom:14.5}, opts||{})); }
+// Like fitBBox, but guarantees at least minZoom even when the shape is big enough that simply
+// fitting its bounds would land well short of street/lot level (which fitBounds alone can't do --
+// its maxZoom only ever caps the zoom, it never forces the map in tighter than "the whole shape fits").
+function flyIntoBBox(b, minZoom, opts){
+  const o = Object.assign({padding:{top:40,bottom:40,left:40,right:40}}, opts||{});
+  let center, zoom;
+  try{
+    const cam = map.cameraForBounds([[b[0],b[1]],[b[2],b[3]]], o);
+    center = cam.center; zoom = Math.max(cam.zoom, minZoom);
+  }catch(e){ center = [(b[0]+b[2])/2, (b[1]+b[3])/2]; zoom = minZoom; }
+  if(o.maxZoom!=null) zoom = Math.min(zoom, o.maxZoom);
+  map.flyTo({center, zoom, duration:700});
+}
 function bboxUnion(list){ return list.reduce((a,h)=> a? [Math.min(a[0],h.bbox[0]),Math.min(a[1],h.bbox[1]),Math.max(a[2],h.bbox[2]),Math.max(a[3],h.bbox[3])] : h.bbox.slice(), null); }
 
 function bindArea(k, fly=true){
@@ -481,7 +494,7 @@ function select(gid, fly=true){
   selected = {type:'hood', gid};
   clearZipSel();
   applyStates();
-  if(fly) fitBBox(h.bbox, {padding:{top:50,bottom:50,left:50,right:50}, maxZoom: 14.5});
+  if(fly) flyIntoBBox(h.bbox, 15.5, {padding:{top:50,bottom:50,left:50,right:50}, maxZoom: 17});
   renderPanel(); panel.classList.add('open');
 }
 function clearZipSel(){ if(selectedZipFid!==null && geoLoaded){ map.removeFeatureState({source:'zips'}); selectedZipFid=null; } }
@@ -494,7 +507,7 @@ function selectZip(z, fly=true){
     // feature ids for zips are auto-assigned; use a paint filter instead of feature-state for reliability
     map.setPaintProperty('zips-fill','fill-color', ['case', ['==',['get','zip'],z], '#FFE9A8', '#F7F3EA']);
     map.setPaintProperty('zips-fill','fill-opacity', ['case', ['==',['get','zip'],z], 0.75, 0.35]);
-    if(fly){ const src = hoodsSourceData && hoodsSourceData.zips.features.find(f=>f.properties.zip===z && f.properties.area===areaKey); if(src) fitBBox(geomBBox(src.geometry), {maxZoom:14}); }
+    if(fly){ const src = hoodsSourceData && hoodsSourceData.zips.features.find(f=>f.properties.zip===z && f.properties.area===areaKey); if(src) flyIntoBBox(geomBBox(src.geometry), 14, {maxZoom:15.5}); }
   }
   applyStates(); renderPanel(); panel.classList.add('open');
 }
@@ -586,6 +599,7 @@ function renderTab(h){
 async function loadData(){
   try{ const r = await fetch('data/housing.json'); if(r.ok) HOUSING = await r.json(); }catch(e){}
   try{ const r = await fetch('data/schools.json'); if(r.ok) SCHOOLS = await r.json(); }catch(e){}
+  try{ const r = await fetch('data/lot_stats.json'); if(r.ok) LOTS = await r.json(); }catch(e){}
   const push = ()=>{ if(map.getSource('schools')) map.getSource('schools').setData(schoolsGeo()); else setTimeout(push, 300); };
   push();
   if(selected) renderPanel();
@@ -598,6 +612,36 @@ function housingFor(h){
   const byName = HOUSING.neighborhoods && HOUSING.neighborhoods[h.name];
   const byZip = h.zips.map(z=>HOUSING.zips && HOUSING.zips[z]).filter(Boolean);
   return { hood: byName||null, zip: byZip[0]||null, zipCode: byZip.length?h.zips[byZip.indexOf(byZip[0])]:null, any: !!(byName||byZip.length) };
+}
+function lotStatsFor(name, zips){
+  const byName = LOTS.neighborhoods && LOTS.neighborhoods[name];
+  const byZip = zips.map(z=>LOTS.zips && LOTS.zips[z]).filter(Boolean);
+  return byName || byZip[0] || null;
+}
+function lotStatsHTML(h){
+  const l = lotStatsFor(h.name, h.zips);
+  if(!l) return `<div class="note">Lot-size data loads after the monthly refresh (data/lot_stats.json), or click any lot on the map now for its exact size.</div>`;
+  return `<div class="stat">
+      <div><small>Median lot size</small><b>${l.median_lot_acres!=null?l.median_lot_acres.toFixed(2)+' ac':'—'}</b></div>
+      <div><small>Median lot value</small><b>${fmt$(l.median_land_value)}</b></div>
+      <div><small>Median home age</small><b>${l.median_home_age!=null?l.median_home_age+' yrs':'—'}</b></div>
+      <div><small>Parcels sampled</small><b>${fmtN(l.n_parcels)}</b></div></div>
+    <div class="src">Source: county appraisal districts via the Texas Geographic Information Office (StratMap); lot value is land only (excludes the structure); as of ${LOTS.asof||'—'}.</div>`;
+}
+function tipStatsHTML(p){
+  const zips = JSON.parse(p.zips);
+  const hd = HOUSING.neighborhoods && HOUSING.neighborhoods[p.name];
+  const hz = zips.map(z=>HOUSING.zips && HOUSING.zips[z]).find(Boolean);
+  const price = hd&&hd.zhvi!=null ? hd.zhvi : (hz&&hz.zhvi!=null?hz.zhvi:null);
+  const lot = lotStatsFor(p.name, zips);
+  const rows = [];
+  if(price!=null) rows.push(`Median home ~${fmt$(price)}`);
+  if(lot){
+    if(lot.median_land_value!=null) rows.push(`Median lot ~${fmt$(lot.median_land_value)}`);
+    if(lot.median_lot_acres!=null) rows.push(`Median lot ${lot.median_lot_acres.toFixed(2)} ac`);
+    if(lot.median_home_age!=null) rows.push(`Median home age ${lot.median_home_age} yrs`);
+  }
+  return rows.length ? `<small>${esc(rows.join(' · '))}</small>` : '';
 }
 function pmt(price){
   const loan = price*(1-CONFIG.down/100), r = CONFIG.rate/100/12, n=360;
@@ -631,7 +675,8 @@ function renderHomes(h, b){
     ${sparkline(src.series)}
     ${p?`<div class="note"><b>Est. payment ${fmt$(p.total)}/mo</b> on a ${fmt$(src.zhvi)} home: ${fmt$(p.pi)} P&amp;I at ${CONFIG.rate}% with ${CONFIG.down}% down, plus ~${fmt$(p.tax)} taxes and ~${fmt$(p.ins)} insurance. Estimate only, rate as of ${CONFIG.asofRate}; your rate and payment will differ.</div>`:''}
     <div class="calc"><label>Rate %<input type="number" id="c_rate" step="0.125" value="${CONFIG.rate}"></label><label>Down payment %<input type="number" id="c_down" step="5" value="${CONFIG.down}"></label></div>
-    <div class="src">Source: Zillow Research ZHVI/ZORI (${level})${src.median_sale?', '+(src.sale_source||'Redfin')+' sales':''}; data as of ${HOUSING.asof||'—'}.</div>`;
+    <div class="src">Source: Zillow Research ZHVI/ZORI (${level})${src.median_sale?', '+(src.sale_source||'Redfin')+' sales':''}; data as of ${HOUSING.asof||'—'}.</div>
+    ${lotStatsHTML(h)}`;
   ['c_rate','c_down'].forEach(id=>{ const el=document.getElementById(id); if(el) el.oninput=()=>{ CONFIG.rate=+document.getElementById('c_rate').value||0; CONFIG.down=+document.getElementById('c_down').value||0; renderHomes(h,b); const r=document.getElementById(id); if(r){r.focus();} }; });
 }
 function renderPeople(h, b){

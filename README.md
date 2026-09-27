@@ -1,7 +1,7 @@
-# DFW Neighborhood Atlas — site bundle (v4: lot lines & sizes)
+# DFW Neighborhood Atlas — site bundle (v5: lot stats on hover + better zoom)
 
-This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and two scripts that
-refresh the data (run automatically once a month by GitHub Actions).
+This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and three scripts
+that refresh the data (run automatically once a month by GitHub Actions).
 
 ```
 index.html               the interactive map (all six areas) on a real OpenStreetMap basemap
@@ -9,10 +9,23 @@ data/geo.json            the stylized neighborhood + zip shapes (generated, don'
 data/atlas.json          the neighborhood list the scripts read (zips, names) — generated, don't edit
 data/housing.json        home values, rents, sales, Census figures — written by scripts/refresh_housing.py
 data/schools.json        schools with level, type, location, TEA rating — written by scripts/refresh_schools.py
+data/lot_stats.json      median lot size/value/home age per neighborhood — written by scripts/refresh_lots.py
 data-sources/            the two files you download by hand (TEA ratings, NCES private schools)
 scripts/                 the refresh scripts
 .github/workflows/       the monthly auto-refresh (GitHub Actions)
 ```
+
+## What's new in v5
+* **Hovering a neighborhood now shows numbers**, not just its name: zip code(s), a median home price, a median
+  lot ("land only") value, a median lot size in acres, and a median home age — all in the small dark tooltip
+  that follows your cursor. The same lot figures also now appear as their own row of stats on the Homes tab.
+  These come from a new monthly-refreshed file, `data/lot_stats.json` (see below) — they're a neighborhood-wide
+  median, distinct from the exact size shown when you click one specific lot (that one is still fetched live,
+  described under v4 below).
+* **Clicking a neighborhood (or a zip) now zooms in properly.** Before, the map always zoomed just far enough
+  to fit the whole neighborhood's outline on screen — for a small neighborhood that was plenty, but for a large
+  one it could stop well short of street level. It now flies to at least street/lot level (zoom ~15.5) every
+  time, even for the biggest neighborhoods, so you don't have to zoom in by hand afterward.
 
 ## What's new in v4
 * **Lot lines & sizes.** Turn on the "Lot lines & sizes" chip (top of the map) and zoom in past street level
@@ -52,14 +65,16 @@ scripts/                 the refresh scripts
    A neighborhood can be linked directly: `.../#lakewood`, `#whitley-place`, `#vaquero`.
 5. Custom domain: Settings → Pages → Custom domain, then add the CNAME at your registrar (done: maps.michaeladdison.ai).
 
-## 2. Monthly housing + schools refresh (already on)
+## 2. Monthly housing + schools + lot-stats refresh (already on)
 
 1. Free Census API key: https://api.census.gov/data/key_signup.html → repo **Settings → Secrets and variables →
    Actions → New repository secret** named `CENSUS_KEY`. (Done.)
-2. **Actions** tab → "Refresh housing + schools data" → **Run workflow**. It downloads Zillow's ZHVI/ZORI files
-   and the Census figures, pulls public-school locations from the NCES open-data feed, merges the TEA ratings and
-   private schools from `data-sources/`, writes `data/housing.json` and `data/schools.json`, and commits them.
-   It repeats on the 3rd of every month.
+2. **Actions** tab → "Refresh housing + schools + lot data" → **Run workflow**. It downloads Zillow's ZHVI/ZORI
+   files and the Census figures, pulls public-school locations from the NCES open-data feed, merges the TEA
+   ratings and private schools from `data-sources/`, queries the state's parcel feed for each neighborhood's
+   median lot size/value/home age, writes `data/housing.json`, `data/schools.json` and `data/lot_stats.json`,
+   and commits them. It repeats on the 3rd of every month. (The lot-stats step alone takes the longest — it's
+   one query per neighborhood, roughly 15-20 minutes for the current neighborhood count; that's normal.)
 3. Optional sales data (median sale price, days on market): download `zip_code_market_tracker.tsv000.gz` from
    https://www.redfin.com/news/data-center/ and run locally:
    `python scripts/refresh_housing.py --census-key KEY --redfin zip_code_market_tracker.tsv000.gz`, then commit
@@ -87,6 +102,8 @@ Zillow Research. Sales: Redfin Data Center. Demographics: U.S. Census ACS. Schoo
 Texas Education Agency. Private schools: NCES Private School Survey. Parcel lines and lot sizes: county
 appraisal districts via the Texas Geographic Information Office (StratMap). Neighborhood areas are stylized.
 
-Lot data note: this is fetched live from the state's server each time someone zooms into a new area — it is
-not stored in this repo and there's nothing to refresh monthly. If TxGIO changes that service's address, tell
-me and I'll point the map at the new one (one line to change, in `template3.html`'s `PARCELS_URL`).
+Lot data note: parcels are used two ways. The exact size shown when you click one specific lot is fetched
+live from the state's server each time someone zooms into a new area — never stored in this repo. The median
+lot size/value/home age shown on hover and on the Homes tab (`data/lot_stats.json`) is a monthly snapshot, like
+the housing and school data. If TxGIO changes that service's address, tell me and I'll point the map at the
+new one (one line to change: `PARCELS_URL`, used in both `template3.html` and `scripts/refresh_lots.py`).
