@@ -73,6 +73,7 @@ h1 span{color:var(--accent)}
 .pill.build{background:repeating-linear-gradient(45deg,var(--panel2),var(--panel2) 5px,var(--line) 5px,var(--line) 7px)}
 .reset{position:absolute;left:12px;top:12px;z-index:2;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;padding:0 12px;font-size:13px;font-weight:500;box-shadow:var(--shadow)}
 .zoomhint{position:absolute;left:12px;bottom:12px;z-index:2;font-size:11px;color:var(--ink2);background:var(--panel);border:1px solid var(--line);padding:4px 9px;border-radius:999px;pointer-events:none;box-shadow:var(--shadow)}
+.legalmini{display:none;position:absolute;left:8px;right:40px;bottom:6px;z-index:2;font-size:9.5px;color:var(--ink2);background:color-mix(in srgb,var(--panel) 88%,transparent);padding:3px 8px;border-radius:8px;pointer-events:none;text-align:center;line-height:1.3}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:22px;display:flex;flex-direction:column;min-height:0;overflow:hidden;box-shadow:var(--shadow)}
 .ph{padding:18px 18px 0;border-top:8px solid var(--rc,var(--accent));position:relative}
 .eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);font-weight:700;display:flex;align-items:center;gap:8px}
@@ -145,8 +146,13 @@ input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-
   .panel.open{transform:none}
   .close{display:block}
   .ph h2{font-size:22px}
-  .legalese{display:none}
+  /* keep the lender disclosures visible on phones too -- just tighter (they're required on every page) */
+  .legalese{font-size:10px;padding:6px 14px 8px;line-height:1.3;max-height:5.5em;overflow:auto}
+  .legalmini{display:block}
   .zoomhint{display:none}
+  .areas{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;width:100%}
+  .areas::-webkit-scrollbar{display:none}
+  .areas button{white-space:nowrap;flex:none}
 }
 </style>
 
@@ -177,6 +183,7 @@ input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-
       <button class="reset" id="reset">Reset view</button>
       <div class="zoomhint" id="zoomhint">Zoom in for streets, addresses, school names and lots</div>
       <div class="zoomhint" id="lotshint" style="display:none;left:auto;right:12px"></div>
+      <div class="legalmini">Equal Housing Lender · Michael Addison, NMLS #603214 · The Federal Savings Bank · shapes are stylized, confirm by address</div>
     </div>
 
     <aside class="panel" id="panel" aria-live="polite">
@@ -192,6 +199,9 @@ const AREA_ORDER = META.order;
 const STYLE_URL = %%STYLE%%;
 const TIERS = {2:'$$ · mid', 3:'$$$ · upper', 4:'$$$$ · luxury', 5:'$$$$$ · estate'};
 const BUILDS = {established:'Established', teardown:'Teardown / rebuild', custom:'Active custom construction', master:'Master-planned (production + custom)', urban:'Urban · condo & townhome'};
+// which build tags the "Custom-build hotspots" toggle keeps lit -- master-planned communities carry custom
+// builders too, so they count (they used to be dimmed along with 'established')
+const HOTSPOT_BUILDS = ['custom','teardown','master'];
 const SCHOOL_COLORS = {public:'#3D8BBB', magnet:'#D9A400', charter:'#2E8B6A', private:'#7A5AD9'};
 const GRADE_COLORS = {A:'#1F7A4D', B:'#4C9A6A', C:'#C9A227', D:'#D97B3B', F:'#B3261E'};
 // Parcels: Texas Geographic Information Office StratMap land parcels (every county appraisal district, one feed, no key)
@@ -233,8 +243,11 @@ function pickFonts(){ // use fonts the basemap style already ships, so glyphs ar
   const reg = all.find(f=>/regular/i.test(f)) || all[0];
   FONT=[bold]; FONT_REG=[reg];
 }
-const opCase = base => ['case', ['boolean',['feature-state','dim'],false], 0.10, ['boolean',['feature-state','selected'],false], 0.62, ['boolean',['feature-state','hover'],false], 0.58, base];
-const FILL_OPACITY = ['interpolate',['linear'],['zoom'], 9, opCase(0.5), 13, opCase(0.32), 16, opCase(0.14)];
+// Every state fades as you zoom in -- including selected/hover -- so that at street/lot level the tint is a
+// light wash and the basemap streets and lot lines stay readable (a fixed 0.62 for "selected" used to sit
+// over exactly the streets and lots the click had just zoomed to).
+const opCase = (base, sel, hov) => ['case', ['boolean',['feature-state','dim'],false], 0.10, ['boolean',['feature-state','selected'],false], sel, ['boolean',['feature-state','hover'],false], hov, base];
+const FILL_OPACITY = ['interpolate',['linear'],['zoom'], 9, opCase(0.5,0.62,0.58), 13, opCase(0.32,0.5,0.45), 16, opCase(0.14,0.22,0.2), 18, opCase(0.06,0.1,0.1)];
 function addLayers(geo){
   map.addSource('hoods', {type:'geojson', data: geo.hoods, promoteId: 'gid'});
   map.addSource('zips', {type:'geojson', data: geo.zips});
@@ -289,12 +302,13 @@ function addLayers(geo){
   }, paint:{'text-color':'#2A2622','text-halo-color':'rgba(255,255,255,.9)','text-halo-width':1.4}});
   // lots (parcels) — loaded on demand for the visible area once zoomed in
   map.addSource('lots', {type:'geojson', data:{type:'FeatureCollection', features:[]}, promoteId:'prop_id'});
+  // drawn above the neighborhood tint (but below its outline) so lot lines are never washed out by it
   map.addLayer({id:'lots-fill', type:'fill', source:'lots', minzoom: LOTS_MINZOOM, paint:{
     'fill-color':'#1F1B16', 'fill-opacity': ['case', ['boolean',['feature-state','hover'],false], 0.14, 0.01]
-  }}, 'hoods-fill');
+  }}, 'hoods-line');
   map.addLayer({id:'lots-line', type:'line', source:'lots', minzoom: LOTS_MINZOOM, paint:{
     'line-color':'#6B5E4E', 'line-width': ['interpolate',['linear'],['zoom'], 15, 0.5, 17, 1, 19, 1.6], 'line-opacity': 0.75
-  }}, 'hoods-fill');
+  }}, 'hoods-line');
   applySchoolFilter();
   wireMap();
   geoLoaded = true;
@@ -375,7 +389,7 @@ map.on('load', async ()=>{
 function setFeatureStates(){ /* recompute dim states for every hood */
   if(!geoLoaded) return;
   Object.values(byGid).forEach(h=>{
-    const dim = (h.area===areaKey) && ((regionFilter && h.region!==regionFilter) || (showBuild && !['custom','teardown'].includes(h.build)));
+    const dim = (h.area===areaKey) && ((regionFilter && h.region!==regionFilter) || (showBuild && !HOTSPOT_BUILDS.includes(h.build)));
     map.setFeatureState({source:'hoods', id:h.gid}, {dim: !!dim, selected: !!(selected&&selected.type==='hood'&&selected.gid===h.gid)});
   });
 }
@@ -393,6 +407,7 @@ function wireMap(){
     const p = f.properties; const r = META.areas[p.area].regions[p.region];
     tip.innerHTML = `${esc(p.name)}<small>${esc(r?r.name:'')} · ${JSON.parse(p.zips).join(', ')}</small>${tipStatsHTML(p)}`;
     tip.style.display='block'; tip.style.left=e.point.x+'px'; tip.style.top=e.point.y+'px';
+    tip.style.transform = e.point.y < 70 ? 'translate(-50%, 24px)' : 'translate(-50%,-140%)';   // flip below the cursor near the top edge instead of clipping
   });
   map.on('mouseleave', 'hoods-fill', ()=>{ if(hoverGid!==null) map.setFeatureState({source:'hoods', id:hoverGid}, {hover:false}); hoverGid=null; map.getCanvas().style.cursor=''; tip.style.display='none'; });
   map.on('click', 'hoods-fill', e=>{
@@ -434,7 +449,7 @@ function bboxUnion(list){ return list.reduce((a,h)=> a? [Math.min(a[0],h.bbox[0]
 function bindArea(k, fly=true){
   areaKey = k; const A = META.areas[k];
   REGIONS = A.regions; HOODS = A.neighborhoods; ZIPS = A.zips;
-  selected = null; regionFilter = null; tab='overview';
+  selected = null; regionFilter = null; tab='overview'; clearZipSel();
   if(geoLoaded){ ['zips-fill','zips-line','zips-label'].forEach(id=>{ if(map.getLayer(id)) map.setFilter(id, ['==',['get','area'],k]); }); }
   setLayer('hood'); buildLegend(); applyStates(); renderPanel(); closePanel();
   document.querySelectorAll('#areas button').forEach(b=> b.setAttribute('aria-pressed', String(b.dataset.key===k)));
@@ -456,7 +471,7 @@ function buildLegend(){
   });
   const sep=document.createElement('span'); sep.className='sep'; legend.appendChild(sep);
   const t = document.createElement('button'); t.className='chip toggle'; t.id='buildToggle'; t.setAttribute('aria-pressed', String(showBuild));
-  t.innerHTML = '<i></i>Custom-build hotspots'; t.title='Highlight neighborhoods with active custom construction or teardown/rebuild activity';
+  t.innerHTML = '<i></i>Custom-build hotspots'; t.title='Highlight neighborhoods with active custom construction, teardown/rebuild, or master-planned communities with custom builders';
   t.onclick = ()=>{ showBuild=!showBuild; t.setAttribute('aria-pressed', String(showBuild)); applyStates(); };
   legend.appendChild(t);
   const s = document.createElement('button'); s.className='chip layer'; s.id='schoolToggle'; s.style.setProperty('--c', SCHOOL_COLORS.public); s.setAttribute('aria-pressed', String(showSchools));
@@ -504,8 +519,17 @@ function select(gid, fly=true){
   if(fly) flyIntoBBox(h.bbox, 15.5, {padding:{top:50,bottom:50,left:50,right:50}, maxZoom: 17});
   renderPanel(); panel.classList.add('open');
 }
-function clearZipSel(){ if(selectedZipFid!==null && geoLoaded){ map.removeFeatureState({source:'zips'}); selectedZipFid=null; } }
+const ZIP_FILL_DEFAULT = ['case', ['boolean',['feature-state','selected'],false], '#FFE9A8', '#F7F3EA'];
+const ZIP_OPACITY_DEFAULT = ['case', ['boolean',['feature-state','selected'],false], 0.75, 0.35];
+function clearZipSel(){
+  if(!geoLoaded) return;
+  if(selectedZipFid!==null){ map.removeFeatureState({source:'zips'}); selectedZipFid=null; }
+  // also undo the paint-based highlight selectZip() applies, or the last zip stays yellow forever
+  if(map.getLayer('zips-fill')){ map.setPaintProperty('zips-fill','fill-color', ZIP_FILL_DEFAULT); map.setPaintProperty('zips-fill','fill-opacity', ZIP_OPACITY_DEFAULT); }
+}
 function selectZip(z, fly=true){
+  // a zip from another area (search, or a neighborhood's zip chip after switching areas) switches to that area first
+  if(!ZIPS.includes(z)){ const owner = AREA_ORDER.find(k=> META.areas[k].zips.includes(z)); if(owner && owner!==areaKey) bindArea(owner, false); }
   selected = {type:'zip', zip:z};
   setLayer('zip'); clearZipSel();
   if(geoLoaded){
@@ -588,7 +612,8 @@ async function loadData(){
   try{ const r = await fetch('data/housing.json'); if(r.ok) HOUSING = await r.json(); }catch(e){}
   try{ const r = await fetch('data/schools.json'); if(r.ok) SCHOOLS = await r.json(); }catch(e){}
   try{ const r = await fetch('data/lot_stats.json'); if(r.ok) LOTS = await r.json(); }catch(e){}
-  const push = ()=>{ if(map.getSource('schools')) map.getSource('schools').setData(schoolsGeo()); else setTimeout(push, 300); };
+  let tries = 0;   // give up after ~30s rather than polling forever if the map never got its layers (geo.json failed)
+  const push = ()=>{ if(map.getSource('schools')) map.getSource('schools').setData(schoolsGeo()); else if(++tries < 100) setTimeout(push, 300); };
   push();
   if(selected) renderPanel();
 }
@@ -598,8 +623,10 @@ const fmtN = v => v==null?'—':Math.round(v).toLocaleString();
 const fmtP = v => v==null?'—':(Math.round(v*10)/10)+'%';
 function housingFor(h){
   const byName = HOUSING.neighborhoods && HOUSING.neighborhoods[h.name];
-  const byZip = h.zips.map(z=>HOUSING.zips && HOUSING.zips[z]).filter(Boolean);
-  return { hood: byName||null, zip: byZip[0]||null, zipCode: byZip.length?h.zips[byZip.indexOf(byZip[0])]:null, any: !!(byName||byZip.length) };
+  // first of the neighborhood's zips that actually has data -- keeps the "Source: zip X" label honest when
+  // only the second zip is covered (indexOf on the filtered list used to mislabel it as the first zip)
+  const zipCode = h.zips.find(z=> HOUSING.zips && HOUSING.zips[z]) || null;
+  return { hood: byName||null, zip: zipCode ? HOUSING.zips[zipCode] : null, zipCode, any: !!(byName||zipCode) };
 }
 function lotStatsFor(name, zips){
   const byName = LOTS.neighborhoods && LOTS.neighborhoods[name];
@@ -704,12 +731,14 @@ function renderSchools(h, b){
 // ---------- search (all areas)
 const q = document.getElementById('q'), sr = document.getElementById('sr');
 const ALL_HOODS = Object.values(byGid);
+const ALL_ZIPS = AREA_ORDER.flatMap(k=> (META.areas[k].zips||[]).map(zip=>({zip, area:k})));
 q.addEventListener('input', ()=>{
   const v = q.value.trim().toLowerCase(); sr.innerHTML=''; if(!v){ sr.classList.remove('open'); return; }
   const hits = ALL_HOODS.filter(h=> h.name.toLowerCase().includes(v) || h.zips.some(z=>z.startsWith(v))).sort((a,b)=> (a.area===areaKey?0:1)-(b.area===areaKey?0:1)).slice(0,12);
-  const zhits = /^\d{2,5}$/.test(v) ? ZIPS.filter(z=>z.startsWith(v)).slice(0,6) : [];
+  // zips from every area, current area first (neighborhood hits already search all areas)
+  const zhits = /^\d{2,5}$/.test(v) ? ALL_ZIPS.filter(x=>x.zip.startsWith(v)).sort((a,b)=> (a.area===areaKey?0:1)-(b.area===areaKey?0:1)).slice(0,6) : [];
   hits.forEach(h=>{ const b=document.createElement('button'); b.setAttribute('role','option'); b.innerHTML=`<span class="dot" style="background:${META.areas[h.area].regions[h.region].color}"></span>${esc(h.name)}<small>${h.area===areaKey?'':esc(META.areas[h.area].title)+' · '}${h.zips.join(', ')}</small>`; b.onclick=()=>{ sr.classList.remove('open'); q.value=''; setLayer('hood'); select(h.gid); }; sr.appendChild(b); });
-  zhits.forEach(z=>{ const b=document.createElement('button'); b.setAttribute('role','option'); b.innerHTML=`<span class="dot" style="background:#1F1B16"></span>Zip ${z}<small>zip layer</small>`; b.onclick=()=>{ sr.classList.remove('open'); q.value=''; selectZip(z); }; sr.appendChild(b); });
+  zhits.forEach(x=>{ const b=document.createElement('button'); b.setAttribute('role','option'); b.innerHTML=`<span class="dot" style="background:#1F1B16"></span>Zip ${x.zip}<small>${x.area===areaKey?'':esc(META.areas[x.area].title)+' · '}zip layer</small>`; b.onclick=()=>{ sr.classList.remove('open'); q.value=''; selectZip(x.zip); }; sr.appendChild(b); });
   sr.classList.toggle('open', sr.children.length>0);
 });
 document.addEventListener('click', e=>{ if(!e.target.closest('.search')) sr.classList.remove('open'); });
@@ -718,6 +747,7 @@ q.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const f=sr.querySelector
 bindArea(AREA_ORDER[0], false);
 function deepLink(){ const hash = decodeURIComponent(location.hash.slice(1)).toLowerCase(); if(!hash) return;
   const h = ALL_HOODS.find(x=> x.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')===hash); if(h) select(h.gid); }
+window.addEventListener('hashchange', ()=>{ if(geoLoaded) deepLink(); });   // links like #lakewood work after load too, not only on first paint
 window.__atlas = {select, selectZip, bindArea, map, byGid, lotDims, lotPopupHTML, loadLots, get state(){ return {areaKey, selected, regionFilter, geoLoaded}; }};
 </script>
 </html>

@@ -1,4 +1,4 @@
-# DFW Neighborhood Atlas — site bundle (v9: Dallas–Southlake corridor + lakes/colors fix)
+# DFW Neighborhood Atlas — site bundle (v10: review fixes)
 
 This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and the scripts
 that refresh the data (mostly run automatically by GitHub Actions).
@@ -25,6 +25,31 @@ internal-lending/worker/register.js   the Cloudflare Worker source that checks t
                           each registration — deploy it per internal-lending/README.md's setup steps.
 robots.txt               tells search engines to skip internal-lending/
 ```
+
+## What's new in v10 (code review pass)
+* **Lender disclosures now show on phones.** The Equal Housing Lender / NMLS footer was hidden below 900px
+  wide; it's now a compact strip over the map plus a tighter panel footer. (Compliance item — was a real gap.)
+* **Street level is readable again after clicking a neighborhood.** The selected neighborhood's color used to
+  stay at 62% opacity at every zoom, so it sat as a heavy wash over the very streets and lot lines the click
+  had just zoomed to; it now fades with zoom like everything else, and lot lines draw above the tint.
+* **Zip highlight resets.** Selecting a zip, then a neighborhood, then switching back to the zip layer left the
+  old zip lit yellow forever. Fixed.
+* **Zip search works across areas.** Typing a zip from another area now offers that zip and jumps to its area,
+  the same way neighborhood search already did.
+* **"Source: zip X" label** on the Homes/People tabs could name the wrong zip when only a neighborhood's second
+  zip had data. Fixed.
+* **"Custom-build hotspots" toggle** now also keeps master-planned communities (production + custom builders,
+  e.g. Canyon Falls) lit instead of dimming them with "established".
+* **Monthly refresh is resilient.** One data source being down (the state parcel server, Zillow, the CFPB API)
+  used to fail the whole run and commit nothing; each step now runs independently, whatever succeeded gets
+  committed, and the run is still flagged red (with the failure email) if anything failed.
+* Smaller: hover tooltip flips below the cursor near the top edge instead of clipping; `#neighborhood` links
+  work after load too (not only on first paint); the schools layer no longer polls forever if `geo.json`
+  fails; area buttons scroll horizontally on phones now that there are eight; internal-lending page defines
+  its captcha callbacks before the widget script loads, re-locks the button after a failed captcha (the token
+  is single-use), and its empty-state message names the right GitHub Action.
+* Two of the v9 corridor shapes (Canyon Falls/Bartonville, Hidden Creek/Silver Lake) overlapped by 33–50%
+  because of centroid errors; re-placed.
 
 ## What's new in v9
 * **Lakes are unmistakably blue now.** The basemap actually renders water as a muted gray, and translucent

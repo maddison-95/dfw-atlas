@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>Lending signals — internal</title>
+<script>
+// Turnstile callbacks are defined here, BEFORE the widget script is requested, so the widget can never render
+// (and look up its data-callback) ahead of them, whatever order the browser finishes loading things in.
+window.__turnstileToken = null;
+window.onTurnstileOk = (token)=>{ window.__turnstileToken = token; const b=document.getElementById('gateSubmit'); if(b){ b.disabled=false; b.textContent='Register & view'; } };
+window.onTurnstileErr = ()=>{ window.__turnstileToken = null; const b=document.getElementById('gateSubmit'); if(b){ b.disabled=true; b.textContent='Captcha failed to load — refresh the page'; } };
+</script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
   :root{ --bg:#F4F1EA; --panel:#FFFFFF; --line:#E4DFD3; --ink:#241F19; --dim:#6B6459; --accent:#B0473A; }
@@ -91,11 +98,10 @@ const gate = document.getElementById('gate');
 if(localStorage.getItem('il_ok')==='1') gate.style.display='none';
 
 const submitBtn = document.getElementById('gateSubmit');
-let turnstileToken = null;
-window.onTurnstileOk = (token)=>{ turnstileToken = token; submitBtn.disabled = false; submitBtn.textContent = 'Register & view'; };
-window.onTurnstileErr = ()=>{ turnstileToken = null; submitBtn.disabled = true; submitBtn.textContent = 'Captcha failed to load — refresh the page'; };
+// (the Turnstile callbacks themselves live in the <head>, ahead of the widget script -- see there)
 
 document.getElementById('gateForm').onsubmit = async (e)=>{
+  const turnstileToken = window.__turnstileToken;
   e.preventDefault();
   const errEl = document.getElementById('gateErr');
   errEl.textContent = '';
@@ -110,7 +116,7 @@ document.getElementById('gateForm').onsubmit = async (e)=>{
     const r = await fetch(REGISTER_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, email, mobile, token: turnstileToken}) });
     const d = await r.json();
     if(d.ok){ localStorage.setItem('il_ok','1'); gate.style.display='none'; }
-    else { errEl.textContent = d.error || 'Something went wrong — please try again.'; submitBtn.disabled = false; submitBtn.textContent = 'Register & view'; if(window.turnstile) turnstile.reset(); turnstileToken = null; }
+    else { errEl.textContent = d.error || 'Something went wrong — please try again.'; submitBtn.disabled = true; submitBtn.textContent = 'Solve the check above to continue'; if(window.turnstile) turnstile.reset(); window.__turnstileToken = null; }
   }catch(e){
     errEl.textContent = 'Could not reach the registration service — try again in a moment.';
     submitBtn.disabled = false; submitBtn.textContent = 'Register & view';
@@ -125,7 +131,7 @@ const ORDER = ['48113','48085','48121','48439','48397'];
 fetch('data/hmda_stats.json').then(r=>r.ok?r.json():null).then(d=>{
   const el = document.getElementById('content');
   if(!d || !d.counties || !Object.keys(d.counties).length){
-    el.innerHTML = `<p class="note">No data yet — run the "Refresh lending signals" GitHub Action, or it hasn't completed its first run.</p>`;
+    el.innerHTML = `<p class="note">No data yet — run the "Refresh housing + schools + lot + lending data" GitHub Action, or it hasn't completed its first run.</p>`;
     return;
   }
   const rows = ORDER.map(f=>d.counties[f]).filter(Boolean);
