@@ -1,4 +1,4 @@
-# DFW Neighborhood Atlas — site bundle (v8: internal-lending registration gate)
+# DFW Neighborhood Atlas — site bundle (v9: Dallas–Southlake corridor + lakes/colors fix)
 
 This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and the scripts
 that refresh the data (mostly run automatically by GitHub Actions).
@@ -26,7 +26,31 @@ internal-lending/worker/register.js   the Cloudflare Worker source that checks t
 robots.txt               tells search engines to skip internal-lending/
 ```
 
+## What's new in v9
+* **Lakes are unmistakably blue now.** The basemap actually renders water as a muted gray, and translucent
+  neighborhood colors sat on top of it, so a lake could look the same as the land around it. Real lakes and
+  rivers are now redrawn a second time, in a solid blue, above every neighborhood/zip color fill.
+* **Region colors that were themselves blue-ish are gone**, so a neighborhood swatch never reads as water —
+  this affected Far North Dallas, East Plano & Murphy, Celina, McKinney, Westlake/Trophy Club/Roanoke and
+  Rockwall (several of which sit right on real lakes), plus a stronger blue used for Oak Cliff.
+* **Southlake now has its own top button**, split out from the old combined "Southlake, Westlake &
+  Colleyville" button. Westlake and Colleyville now share their own "Westlake & Colleyville" button.
+* **New area: "Irving, Coppell & Grapevine"** — 17 new neighborhoods filling in the higher-end / active
+  custom-construction corridor between Dallas and Southlake: Las Colinas, Hackberry Creek and Cottonwood
+  Valley (Irving); Old Town Coppell, Riverchase and Panther Creek (Coppell); Historic Downtown Grapevine,
+  Hidden Creek and Silver Lake Estates (Grapevine); and the Flower Mound / Argyle / Bartonville / Double Oak /
+  Copper Canyon / Northlake-Justin belt along I-35W, one of DFW's most active large-lot custom-home corridors.
+  Same honest caveat as the rest of the hand-curated set: tier, build activity and district are a starting
+  classification from general knowledge, not survey data — the page says so, and it's worth spot-checking a
+  few before relying on them with Realtor partners. Home values / rents / demographics will fill in on their
+  own from the next monthly refresh once these zips are in `data/atlas.json`'s lookup (they already are).
+
 ## What's new in v8
+* **The "Get pre-approved" tab is gone from the public map.** Every neighborhood panel used to end with a
+  lead-capture form (name/email/phone/timeline) that only produced a copy-paste note, since it was never wired
+  to a CRM. That tab, its button, and its now-unused CSS have all been removed — panels are Overview / Schools /
+  People / Homes only. Contact info can come back later once there's a real destination (a form that actually
+  submits somewhere), just say the word.
 * **The internal-lending page now registers visitors instead of using a shared passphrase.** Anyone opening
   `internal-lending/` gives their name, email and mobile number and solves a live captcha (Cloudflare
   Turnstile, free) before seeing anything; you get an email the moment someone gets in. There's still just one

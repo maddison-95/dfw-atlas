@@ -96,15 +96,9 @@ h1 span{color:var(--accent)}
 .stat small{display:block;color:var(--ink2);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .stat b{font-size:20px;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-.02em}
 .stat b.pending{color:var(--ink2);font-weight:500;font-size:16px}
-.cta{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:var(--accent-ink);border:0;border-radius:999px;padding:10px 16px;font-weight:700;cursor:pointer;margin-top:6px}
-.cta:focus-visible,.chip:focus-visible,.reset:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-form{display:grid;gap:10px}
+.chip:focus-visible,.reset:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 label{display:grid;gap:4px;font-size:13px;color:var(--ink2);font-weight:500}
-input[type=text],input[type=email],input[type=tel],select{padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--panel);width:100%}
 input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
-.contact{display:grid;gap:4px;font-size:14px;margin-top:12px}
-.contact b{font-family:"Bricolage Grotesque",sans-serif;font-size:16px}
-.copy{border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:3px 8px;font-size:12px;cursor:pointer;margin-left:6px}
 .empty{color:var(--ink2);padding:24px 0}
 .empty b{display:block;color:var(--ink);font-family:"Bricolage Grotesque",sans-serif;font-size:20px;margin-bottom:6px}
 .legalese{font-size:11px;color:var(--ink2);padding:10px 18px 14px;border-top:1px solid var(--line);line-height:1.4}
@@ -264,6 +258,19 @@ function addLayers(geo){
   map.addLayer({id:'zips-line', type:'line', source:'zips', layout:{visibility:'none'}, filter:['==',['get','area'],areaKey], paint:{'line-color':'#1F1B16','line-width':1.2,'line-dasharray':[3,2],'line-opacity':.7}}, beforeId);
   if(TEXT) map.addLayer({id:'zips-label', type:'symbol', source:'zips', layout:{visibility:'none', 'text-field':['get','zip'], 'text-font':FONT, 'text-size':['interpolate',['linear'],['zoom'],9,11,13,16], 'symbol-placement':'point'}, filter:['==',['get','area'],areaKey],
     paint:{'text-color':'#1F1B16','text-halo-color':'#FFFFFF','text-halo-width':1.6}});
+  // real lakes/rivers, redrawn a second time on top of every neighborhood/zip tint below, in an unmistakable
+  // blue -- the basemap's own water is a muted gray so a translucent neighborhood color sitting over a lake
+  // (Lake Ray Hubbard, Grapevine Lake, White Rock Lake, etc.) could otherwise read as land. Reuses the
+  // basemap's own vector water layer (no extra download); guarded because the offline test style has no
+  // such source.
+  if(map.getSource('openmaptiles')){
+    map.addLayer({id:'water-top', type:'fill', source:'openmaptiles', 'source-layer':'water', paint:{
+      'fill-color': '#5F97C4', 'fill-opacity': 0.92
+    }}, beforeId);
+    map.addLayer({id:'water-top-line', type:'line', source:'openmaptiles', 'source-layer':'water', paint:{
+      'line-color': '#3E6E93', 'line-width': 0.6, 'line-opacity': 0.5
+    }}, beforeId);
+  }
   // neighborhood labels: bigger areas win collisions; more appear as you zoom in
   if(TEXT) map.addLayer({id:'hoods-label', type:'symbol', source:'hoods', layout:{
     'text-field':['get','name'], 'text-font':FONT, 'symbol-sort-key':['-',0,['get','sqmi']],
@@ -520,7 +527,8 @@ function district(h){
   if(a==='richplano'){ if(h.region==='RICH') return 'Richardson ISD (Plano ISD north of Renner)'; if(n==='Murphy') return 'Plano ISD / Wylie ISD'; return 'Plano ISD'; }
   if(a==='frisco'){ if(h.region==='PROSPER') return 'Prosper ISD'; if(h.region==='CELINA') return 'Celina ISD / Prosper ISD'; return 'Frisco ISD'; }
   if(a==='mckinney'){ if(n==='Lucas') return 'Lovejoy ISD'; if(n==='Fairview acreage'||n==='Heritage Ranch') return 'Lovejoy ISD / McKinney ISD'; if(n==='Parker') return 'Plano ISD / Allen ISD'; if(h.region==='ALLEN') return 'Allen ISD'; if(n==='Craig Ranch'||n==='Kings Lake') return 'Frisco ISD / McKinney ISD'; return 'McKinney ISD'; }
-  if(a==='southlake'){ if(h.region==='SOUTHLAKE') return 'Carroll ISD'; if(h.region==='COLLEY') return 'Grapevine-Colleyville ISD'; if(n==='Trophy Club'||n==='Roanoke') return 'Northwest ISD'; return 'Westlake Academy (charter) / Carroll ISD / Keller ISD'; }
+  if(a==='southlake') return 'Carroll ISD';
+  if(a==='westlake-colleyville'){ if(h.region==='COLLEY') return 'Grapevine-Colleyville ISD'; if(n==='Trophy Club'||n==='Roanoke') return 'Northwest ISD'; return 'Westlake Academy (charter) / Carroll ISD / Keller ISD'; }
   if(a==='rockwall'){ if(h.region==='ROWLETT') return n==='Woodbridge'?'Garland ISD / Wylie ISD':'Garland ISD'; if(h.region==='SUNNY') return 'Sunnyvale ISD'; if(h.region==='WYLIE') return n.startsWith('Firewheel')?'Garland ISD':'Wylie ISD'; if(h.region==='FATE') return 'Rockwall ISD / Royse City ISD'; return 'Rockwall ISD'; }
   if(['Highland Park','University Park'].includes(n)) return 'Highland Park ISD';
   if(['Lake Highlands','L Streets','Highland Meadows','Hamilton Park','Northwood Hills','Hillcrest Forest','Merriman Park'].includes(n)) return 'Richardson ISD (parts Dallas ISD)';
@@ -538,7 +546,7 @@ function renderPanel(){
   const closeBtn='<button class="close" aria-label="Close" onclick="closePanel()">×</button>';
   if(!selected){
     panel.style.setProperty('--rc','var(--accent)');
-    panelInner.innerHTML = `<div class="ph"><div class="eyebrow"><i></i>Start here</div><h2>Pick a neighborhood</h2></div><div class="body"><div class="empty"><b>${HOODS.length} neighborhoods in ${esc(META.areas[areaKey].title)}.</b>Hover to preview, click to open the profile: zip codes, schools, price tier, build activity and a quick path to a pre-approval. Switch areas with the buttons above; a region chip zooms to that part of town. Zoom the map for streets, addresses and school names.</div></div>`;
+    panelInner.innerHTML = `<div class="ph"><div class="eyebrow"><i></i>Start here</div><h2>Pick a neighborhood</h2></div><div class="body"><div class="empty"><b>${HOODS.length} neighborhoods in ${esc(META.areas[areaKey].title)}.</b>Hover to preview, click to open the profile: zip codes, schools, price tier, build activity, people and home data. Switch areas with the buttons above; a region chip zooms to that part of town. Zoom the map for streets, addresses and school names.</div></div>`;
     return;
   }
   if(selected.type==='zip'){
@@ -554,7 +562,7 @@ function renderPanel(){
   }
   const h = byGid[selected.gid]; const r = REGIONS[h.region];
   panel.style.setProperty('--rc', r.color);
-  const tabs = [['overview','Overview'],['schools','Schools'],['people','People'],['homes','Homes'],['lead','Get pre-approved']];
+  const tabs = [['overview','Overview'],['schools','Schools'],['people','People'],['homes','Homes']];
   panelInner.innerHTML = `<div class="ph">${closeBtn}<div class="eyebrow"><i></i>${esc(r.name)}</div><h2>${esc(h.name)}</h2>
     <div class="zips">${h.zips.map(z=>`<span title="Show zip ${z}">${z}</span>`).join('')}</div>
     <div class="pills">${h.tier?`<span class="pill">${TIERS[h.tier]||''}</span>`:''}${h.build?`<span class="pill build">${BUILDS[h.build]||h.build}</span>`:''}</div></div>
@@ -569,31 +577,10 @@ function renderTab(h){
   if(tab==='overview'){
     b.innerHTML = `<p>${esc(h.blurb||'A neighborhood in the '+REGIONS[h.region].name+' area.')}</p>
       <dl class="kv"><dt>Part of town</dt><dd>${esc(REGIONS[h.region].name)}</dd><dt>Zip code${h.zips.length>1?'s':''}</dt><dd>${h.zips.join(', ')}</dd><dt>School district</dt><dd>${esc(district(h)).split(' — ')[0]}</dd><dt>Price tier</dt><dd>${TIERS[h.tier]||'—'}</dd><dt>Build activity</dt><dd>${BUILDS[h.build]||'—'}</dd><dt>Map area (approx.)</dt><dd>${h.sqmi} sq mi</dd></dl>
-      <div class="note">${(h.tier||h.build)?`<b>Build note:</b> tier and activity are a starting classification from local knowledge, to be confirmed against city permit data. Home values, sales pace, people and school ratings fill in from the data feeds.`:`<b>Note:</b> this city was added automatically from Census boundaries; school district is a best-match spatial estimate (confirm by address) and price tier / build activity haven't been classified yet. Home values, sales pace, people and school ratings fill in from the data feeds once its zip is covered.`}</div>
-      <button class="cta" id="goLead">Get pre-approved for ${esc(h.name)} →</button>`;
-    document.getElementById('goLead').onclick=()=>{ tab='lead'; renderPanel(); };
+      <div class="note">${(h.tier||h.build)?`<b>Build note:</b> tier and activity are a starting classification from local knowledge, to be confirmed against city permit data. Home values, sales pace, people and school ratings fill in from the data feeds.`:`<b>Note:</b> this city was added automatically from Census boundaries; school district is a best-match spatial estimate (confirm by address) and price tier / build activity haven't been classified yet. Home values, sales pace, people and school ratings fill in from the data feeds once its zip is covered.`}</div>`;
   } else if(tab==='schools'){ renderSchools(h, b); }
   else if(tab==='people'){ renderPeople(h, b); }
   else if(tab==='homes'){ renderHomes(h, b); }
-  else if(tab==='lead'){
-    b.innerHTML = `<p>Tell Michael what you're looking at in ${esc(h.name)} and he'll follow up with numbers, not a sales pitch.</p>
-      <form id="leadForm"><label>Name<input type="text" id="lf_name" required></label><label>Email<input type="email" id="lf_email" required></label><label>Phone<input type="tel" id="lf_phone"></label>
-      <label>Timeline<select id="lf_when"><option>Just exploring</option><option>Buying in 0–3 months</option><option>Buying in 3–12 months</option><option>Building / construction loan</option><option>Investing</option></select></label>
-      <input type="hidden" id="lf_hood" value="${esc(h.name)}">
-      <button class="cta" type="submit">Send to Michael</button></form>
-      <div id="leadDone" hidden></div>
-      <div class="contact"><span class="eyebrow">Or reach out directly</span><b>Michael Addison · VP Mortgage Banking</b><span>The Federal Savings Bank · NMLS #603214</span><span>214-500-1358 <button class="copy" data-copy="214-500-1358">copy</button></span><span>maddison@thefederalsavingsbank.com <button class="copy" data-copy="maddison@thefederalsavingsbank.com">copy</button></span></div>`;
-    b.querySelectorAll('.copy').forEach(c=> c.onclick=()=>{ navigator.clipboard.writeText(c.dataset.copy).then(()=>{c.textContent='copied';setTimeout(()=>c.textContent='copy',1200);}).catch(()=>{}); });
-    document.getElementById('leadForm').onsubmit = e=>{
-      e.preventDefault();
-      const f = id=>document.getElementById(id).value;
-      const summary = `Neighborhood: ${f('lf_hood')}\nName: ${f('lf_name')}\nEmail: ${f('lf_email')}\nPhone: ${f('lf_phone')}\nTimeline: ${f('lf_when')}`;
-      const d = document.getElementById('leadDone'); d.hidden=false;
-      d.innerHTML = `<div class="note"><b>Thanks, ${esc(f('lf_name'))}.</b> This page does not send yet; the CRM hookup is the next step. Copy your note and email it, or call the number below.<br><br><pre style="white-space:pre-wrap;margin:0;font:inherit">${esc(summary)}</pre><button class="copy" id="copyLead">copy note</button></div>`;
-      document.getElementById('copyLead').onclick=()=>{ navigator.clipboard.writeText(summary).catch(()=>{}); };
-      e.target.hidden = true;
-    };
-  }
 }
 
 // ---------- external data (published alongside the page)
