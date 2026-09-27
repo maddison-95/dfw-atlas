@@ -1,4 +1,4 @@
-# DFW Neighborhood Atlas — site bundle (v6: full 5-county coverage)
+# DFW Neighborhood Atlas — site bundle (v8: internal-lending registration gate)
 
 This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and the scripts
 that refresh the data (mostly run automatically by GitHub Actions).
@@ -17,11 +17,26 @@ data/lot_stats.json      median lot size/value/home age per neighborhood — wri
 data-sources/            the two files you download by hand (TEA ratings, NCES private schools)
 scripts/                 the refresh scripts
 .github/workflows/       the automated refresh jobs (GitHub Actions)
-internal-lending/        a SEPARATE, passphrase-gated, non-public page for lending-market signals — not part
-                          of the public map, not linked from it. Read internal-lending/README.md before you
-                          share that link with anyone.
+internal-lending/        a SEPARATE, registration-gated (name/email/mobile + captcha), non-public page for
+                          lending-market signals — not part of the public map, not linked from it. Read
+                          internal-lending/README.md before you share that link with anyone, and before you
+                          set up the free Cloudflare Worker its gate depends on.
+internal-lending/worker/register.js   the Cloudflare Worker source that checks the captcha and emails you
+                          each registration — deploy it per internal-lending/README.md's setup steps.
 robots.txt               tells search engines to skip internal-lending/
 ```
+
+## What's new in v8
+* **The internal-lending page now registers visitors instead of using a shared passphrase.** Anyone opening
+  `internal-lending/` gives their name, email and mobile number and solves a live captcha (Cloudflare
+  Turnstile, free) before seeing anything; you get an email the moment someone gets in. There's still just one
+  permission level — registered or not — no different access tiers. This needs a small one-time setup (a free
+  Cloudflare Worker + a free Resend account) since GitHub Pages can't check a captcha or send an email on its
+  own; full walkthrough in `internal-lending/README.md`. **Until that setup is done, the page's registration
+  form won't work** (it says so on the page itself). This is meaningfully stronger than a shared password, but
+  — like the old passphrase — it's still enforced by the page's own JavaScript, not a real server sitting in
+  front of GitHub Pages, so it doesn't stop someone who already has the exact link. Cloudflare Access remains
+  the upgrade path if that ever needs to be airtight.
 
 ## What's new in v6
 * **Full coverage of all 5 counties.** Every incorporated city and named community in Dallas, Collin, Denton,

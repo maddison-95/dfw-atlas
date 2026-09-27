@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>Lending signals — internal</title>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
   :root{ --bg:#F4F1EA; --panel:#FFFFFF; --line:#E4DFD3; --ink:#241F19; --dim:#6B6459; --accent:#B0473A; }
   *{box-sizing:border-box}
@@ -25,11 +26,15 @@
   .bar-fill{background:var(--accent);height:100%;border-radius:5px}
   .bar-val{width:110px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums;flex:none}
   .note{color:var(--dim);font-size:12.5px;margin:4px 0 24px;max-width:760px}
-  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:20}
-  .gate form{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px;width:min(360px,90vw);text-align:center}
-  .gate input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px;margin:14px 0}
-  .gate button{width:100%;padding:10px;border:0;border-radius:8px;background:var(--ink);color:#fff;font-weight:700;font-size:14px;cursor:pointer}
-  .gate .err{color:var(--accent);font-size:13px;height:18px}
+  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:20;overflow:auto;padding:24px 0}
+  .gate form{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px;width:min(380px,90vw);text-align:center}
+  .gate input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px;margin:8px 0;text-align:left}
+  .gate label{display:block;text-align:left;font-size:12px;color:var(--dim);margin:10px 0 0}
+  .gate .cf-turnstile{margin:14px 0;display:flex;justify-content:center}
+  .gate button{width:100%;padding:10px;border:0;border-radius:8px;background:var(--ink);color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px}
+  .gate button:disabled{opacity:.5;cursor:default}
+  .gate .err{color:var(--accent);font-size:13px;min-height:18px;margin-top:8px}
+  .gate .fineprint{color:var(--dim);font-size:11.5px;margin-top:12px;line-height:1.4}
   .pending{color:var(--dim)}
   section h2{font-size:15px;margin:24px 0 4px}
 </style>
@@ -38,10 +43,17 @@
 <div class="gate" id="gate">
   <form id="gateForm">
     <div style="font-weight:800;font-size:16px;margin-bottom:2px">Internal — lending signals</div>
-    <div style="color:var(--dim);font-size:13px">Not part of the public site. Enter the passphrase.</div>
-    <input type="password" id="gatePass" autocomplete="off" placeholder="Passphrase">
-    <button type="submit">Enter</button>
+    <div style="color:var(--dim);font-size:13px">Not part of the public site. Register to view.</div>
+    <label for="regName">Name</label>
+    <input id="regName" autocomplete="name" required>
+    <label for="regEmail">Email</label>
+    <input id="regEmail" type="email" autocomplete="email" required>
+    <label for="regMobile">Mobile</label>
+    <input id="regMobile" type="tel" autocomplete="tel" required>
+    <div class="cf-turnstile" data-sitekey="%%TURNSTILE_SITE_KEY%%" data-callback="onTurnstileOk" data-error-callback="onTurnstileErr"></div>
+    <button type="submit" id="gateSubmit" disabled>Solve the check above to continue</button>
     <div class="err" id="gateErr"></div>
+    <div class="fineprint">Your name, email and mobile are sent to Michael so he knows who's viewing this page — nothing else is stored or shared.</div>
   </form>
 </div>
 
@@ -60,30 +72,49 @@
 </main>
 
 <script>
-// --- passphrase gate --------------------------------------------------
-// This is a speed bump, not real security: it's client-side JS on a static page, so anyone who views
-// source (or already has the URL) can see the hash below and work around it. It exists only so the
-// page isn't sitting wide open while nobody knows the link. If this page ever needs real access
-// control (shared with more people, or the URL leaks), that needs a proper server-side login -- a
-// static host like GitHub Pages can't do that on its own; tell Claude and we'll look at options
-// (e.g. Cloudflare Access in front of the domain).
+// --- registration gate --------------------------------------------------
+// Fill in these two after following internal-lending/README.md's setup steps:
+const REGISTER_URL = '%%WORKER_URL%%';        // e.g. https://il-register.YOURSUBDOMAIN.workers.dev
+// (the Turnstile site key is set as data-sitekey on the .cf-turnstile div above, not here)
 //
-// To change the passphrase: pick a new one, run this in any browser console, and paste the result
-// below in place of HASH:
-//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('your new passphrase')).then(b=>console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
-const HASH = '638f94ccc3cbbe2298fd9199e4a1f7a4ea2e4799b235a2a9ce17fe3265593a26'; // default passphrase: dfw-signals-26 -- change this, see README
-async function checkPass(pass){
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pass));
-  const hex = [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
-  return hex === HASH;
-}
+// How this differs from the old passphrase: a real name/email/mobile is required, a live captcha has
+// to be solved (not just a password anyone could share), and Michael gets an email every time someone
+// gets in. It's a genuinely stronger gate than a shared password.
+//
+// It is still not the same as a real login system: this page's files are still just static files on
+// GitHub Pages, so someone who already has the exact link (or the data file's URL) can still fetch it
+// directly without ever hitting this form -- registering only stops a casual visitor who lands on the
+// page itself. If that gap matters (the link starts circulating, or this needs to hold something more
+// sensitive), the fix is moving access-checking in front of GitHub Pages itself (e.g. Cloudflare
+// Access) rather than inside the page -- ask and we'll set that up.
 const gate = document.getElementById('gate');
-if(sessionStorage.getItem('il_ok')==='1') gate.style.display='none';
+if(localStorage.getItem('il_ok')==='1') gate.style.display='none';
+
+const submitBtn = document.getElementById('gateSubmit');
+let turnstileToken = null;
+window.onTurnstileOk = (token)=>{ turnstileToken = token; submitBtn.disabled = false; submitBtn.textContent = 'Register & view'; };
+window.onTurnstileErr = ()=>{ turnstileToken = null; submitBtn.disabled = true; submitBtn.textContent = 'Captcha failed to load — refresh the page'; };
+
 document.getElementById('gateForm').onsubmit = async (e)=>{
   e.preventDefault();
-  const ok = await checkPass(document.getElementById('gatePass').value);
-  if(ok){ sessionStorage.setItem('il_ok','1'); gate.style.display='none'; }
-  else { document.getElementById('gateErr').textContent = 'Not it — try again.'; }
+  const errEl = document.getElementById('gateErr');
+  errEl.textContent = '';
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const mobile = document.getElementById('regMobile').value.trim();
+  if(!name || !email || !mobile){ errEl.textContent = 'All three fields are required.'; return; }
+  if(!turnstileToken){ errEl.textContent = 'Please complete the captcha above.'; return; }
+  if(!REGISTER_URL || REGISTER_URL.startsWith('%%')){ errEl.textContent = 'Registration isn’t wired up yet (REGISTER_URL is unset) — see internal-lending/README.md.'; return; }
+  submitBtn.disabled = true; submitBtn.textContent = 'Checking…';
+  try{
+    const r = await fetch(REGISTER_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, email, mobile, token: turnstileToken}) });
+    const d = await r.json();
+    if(d.ok){ localStorage.setItem('il_ok','1'); gate.style.display='none'; }
+    else { errEl.textContent = d.error || 'Something went wrong — please try again.'; submitBtn.disabled = false; submitBtn.textContent = 'Register & view'; if(window.turnstile) turnstile.reset(); turnstileToken = null; }
+  }catch(e){
+    errEl.textContent = 'Could not reach the registration service — try again in a moment.';
+    submitBtn.disabled = false; submitBtn.textContent = 'Register & view';
+  }
 };
 
 // --- data ---------------------------------------------------------------
