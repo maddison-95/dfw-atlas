@@ -1,4 +1,4 @@
-# DFW Neighborhood Atlas — site bundle (v11: cleaner broad view, city names, review follow-ups)
+# DFW Neighborhood Atlas — site bundle (v12: aerial imagery, street-level detail, Street View)
 
 This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and the scripts
 that refresh the data (mostly run automatically by GitHub Actions).
@@ -14,6 +14,7 @@ data/atlas.json          a slimmer neighborhood list the refresh scripts read �
 data/housing.json        home values, rents, sales, Census figures — written by scripts/refresh_housing.py
 data/schools.json        schools with level, type, location, TEA rating — written by scripts/refresh_schools.py
 data/lot_stats.json      median lot size/value/home age per neighborhood — written by scripts/refresh_lots.py
+data/config.json         site keys read on load (currently: Esri key for aerial imagery) — edit on GitHub, no rebuild
 data/rate.json           the rate / down payment / tax / insurance assumptions behind the payment estimate —
                           EDIT THIS ON GITHUB WHEN RATES MOVE (no code change needed)
 data-sources/            the two files you download by hand (TEA ratings, NCES private schools)
@@ -27,6 +28,13 @@ internal-lending/worker/register.js   the Cloudflare Worker source that checks t
                           each registration — deploy it per internal-lending/README.md's setup steps.
 robots.txt               tells search engines to skip internal-lending/
 ```
+
+## What's new in v12
+* **Aerial view** chip: Esri World Imagery under the streets from ~z12 (free key, 2M tiles/month; setup in
+  section 6). Off until a key is in `data/config.json`.
+* **Street level reads like a real map:** building footprints visible from z14, house numbers from z17.
+* **Street View ↗ / Google Maps ↗ / Search address ↗** links on every lot popup — plain Google Maps links,
+  no key or cost, open in a new tab.
 
 ## What's new in v11
 * **Cleaner broad view.** Zoomed out, the street map now shows only the highways and loops (I-635, I-35E,
@@ -223,6 +231,31 @@ a separate generator project, not in this folder — send edits and a new `data/
 places from full county coverage (section 3) can be hand-edited directly in `data/areas_meta.json` (to add a
 blurb, price tier or build tag once you know it) — just also update the matching entry in `data/geo.json`'s
 `hoods` list (same `name`), then run `python assemble3.py` and commit.
+
+## 6. Aerial imagery (free Esri key, ~10 minutes)
+
+The **Aerial view** chip puts real satellite/aerial imagery under the streets once you're zoomed to about z12
+(the broad view stays the clean stylized map on purpose). It uses Esri World Imagery through the ArcGIS
+Location Platform, which gives **2 million tiles a month free** — roughly several thousand map sessions —
+then $0.15 per 1,000. Until a key is in place the chip just shows a hint and nothing is requested.
+
+1. Create a free account at https://location.arcgis.com/sign-up/ (no card).
+2. In the dashboard: **API keys** → **Create API key** (or "New item → API key credentials"). Name it
+   `dfw-atlas`. Under **Privileges** tick **Location services → Basemaps**. Under **Referrers** add
+   `https://maps.michaeladdison.ai/*` (and your GitHub Pages URL if you test there) — this is what stops
+   someone copying the key off your page and using it elsewhere. Set an expiration (a year is fine; you'll
+   get a reminder). Create, then copy the key — it's long and starts with `AAPT`.
+3. In this repo edit `data/config.json` (GitHub web editor is fine): paste the key between the quotes of
+   `"esri_api_key": ""`. Commit. No rebuild is needed — the page reads that file on load.
+4. Reload the map, zoom into any neighborhood, click **Aerial view**.
+
+Esri's terms require the imagery credit that appears in the map's attribution corner ("Powered by Esri…") —
+that's added automatically; don't remove it. If usage ever nears the free 2M tiles, the dashboard shows it
+and you can set a hard budget cap there.
+
+**Also new at street level:** building footprints are readable from z14, house numbers appear from z17, and
+every lot popup has **Street View ↗ / Google Maps ↗ / Search address ↗** links — those are plain Google Maps
+links (no key, no cost) that open the lot in Street View or Google Maps in a new tab.
 
 ## Attribution shown on the page
 Basemap © OpenStreetMap contributors, served by OpenFreeMap. Zip areas: U.S. Census ZCTA. Home values and rents:

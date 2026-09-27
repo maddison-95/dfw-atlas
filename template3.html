@@ -215,6 +215,13 @@ let REGIONS, HOODS, ZIPS;
 const byGid = {}; AREA_ORDER.forEach(k=> META.areas[k].neighborhoods.forEach(h=>{ h.area=k; byGid[h.gid]=h; }));
 let layer = 'hood', regionFilter = null, selected = null, tab = 'overview', showBuild = false, showSchools = true;
 let hoverGid = null, geoLoaded = false, showLots = true, lotsBusy = null, lotsKey = '', hoverLot = null;
+let showAerial = false;
+// data/config.json (edit on GitHub, no rebuild): { "esri_api_key": "..." } enables the aerial-imagery toggle
+const KEYS = { esri: '' };
+// Esri World Imagery via ArcGIS Location Platform (2M tiles/month free). Attribution text is required by Esri's terms.
+const AERIAL_TILES = key => `https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${encodeURIComponent(key)}`;
+const AERIAL_ATTRIB = 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community · Powered by Esri';
+const AERIAL_MINZOOM = 12;   // broad view stays the clean stylized map; imagery only once you're looking at streets
 let schoolLevel = 'ES', schoolTypes = {public:true, magnet:true, charter:true, private:true};
 // Defaults only -- data/rate.json overrides these at load (edit that file on GitHub when rates move; no code change)
 const CONFIG = { rate: 6.5, down: 20, taxRate: 2.2, insRate: 0.5, asofRate: '2026-09' };
@@ -284,6 +291,29 @@ function tuneBasemap(){
   place('label_town',   ['interpolate',['linear'],['zoom'], 8,11, 10,14, 12,17, 14,18]);
   place('label_village',['interpolate',['linear'],['zoom'], 9,10, 11,12, 13,14]);
   if(L('label_other')) map.setLayerZoomRange('label_other', 12, 24);   // hamlets/suburb POIs only once zoomed in
+  // 3) Building footprints readable at street level (positron draws them nearly invisible), from z14 only
+  if(L('building')){
+    map.setLayerZoomRange('building', 14, 24);
+    map.setPaintProperty('building','fill-color','#DDD5C7');
+    map.setPaintProperty('building','fill-outline-color','rgba(110,100,85,.45)');
+    map.setPaintProperty('building','fill-opacity',['interpolate',['linear'],['zoom'],14,0.45,16,0.9]);
+  }
+}
+// Aerial imagery: added lazily the first time it's switched on (no tile requests unless someone asks for it)
+function setAerial(on){
+  if(on && !KEYS.esri){ showAerial=false; setLotsHint('Aerial view needs a free Esri key — see README §6'); setTimeout(()=>setLotsHint(''), 4000); return false; }
+  showAerial = on;
+  if(on && !map.getSource('aerial')){
+    map.addSource('aerial', {type:'raster', tiles:[AERIAL_TILES(KEYS.esri)], tileSize:256, maxzoom:19, attribution: AERIAL_ATTRIB});
+    // sits above land/water/parks/buildings, below every road and label
+    const ls = map.getStyle().layers; const firstRoad = ls.find(l=> l['source-layer']==='transportation' || l.id==='hoods-fill');
+    map.addLayer({id:'aerial-img', type:'raster', source:'aerial', minzoom: AERIAL_MINZOOM, paint:{'raster-opacity':1, 'raster-fade-duration':150}}, firstRoad ? firstRoad.id : undefined);
+  }
+  if(map.getLayer('aerial-img')) map.setLayoutProperty('aerial-img','visibility', on?'visible':'none');
+  // on imagery the drawn water and building footprints just fight the photo; roads/labels stay for orientation
+  ['water-top','water-top-line','building'].forEach(id=>{ if(map.getLayer(id)) map.setLayoutProperty(id,'visibility', on?'none':'visible'); });
+  const t=document.getElementById('aerialToggle'); if(t) t.setAttribute('aria-pressed', String(on));
+  return true;
 }
 function addLayers(geo){
   map.addSource('hoods', {type:'geojson', data: geo.hoods, promoteId: 'gid'});
@@ -324,6 +354,10 @@ function addLayers(geo){
     map.addLayer({id:'water-top-line', type:'line', source:'openmaptiles', 'source-layer':'water', paint:{
       'line-color': '#3E6E93', 'line-width': 0.6, 'line-opacity': 0.5
     }}, beforeId);
+    // house numbers once you're close enough to read a lot (the basemap style ships the data but doesn't draw it)
+    if(TEXT) map.addLayer({id:'housenumbers', type:'symbol', source:'openmaptiles', 'source-layer':'housenumber', minzoom: 17, layout:{
+      'text-field':['get','housenumber'], 'text-font':FONT_REG, 'text-size':['interpolate',['linear'],['zoom'],17,9.5,19,12], 'text-padding':2, 'text-allow-overlap': false
+    }, paint:{'text-color':'#5E5A53','text-halo-color':'rgba(255,255,255,.85)','text-halo-width':1}}, beforeId);
   }
   // neighborhood labels: bigger areas win collisions; more appear as you zoom in
   // from z10.5 only (below that the city names carry the map); below city/town names, above street names
@@ -411,6 +445,14 @@ function lotPopupHTML(p, geom){
   const dims = d ? `${Math.round(d.short)} × ${Math.round(d.long)} ft${d.rectFit<0.8?' (irregular shape)':''}` : '—';
   const money = v => { const n=num(v); return n==null?'—':'$'+Math.round(n).toLocaleString(); };
   const addr = [p.situs_addr, p.situs_city].filter(Boolean).join(', ');
+  // Google "Maps URLs" -- plain links, no API key, no cost: Street View panorama at the lot, and the lot in Google Maps
+  const ring = geom.type==='Polygon' ? geom.coordinates[0] : geom.coordinates[0][0];
+  const cLat = (ring.reduce((a,c)=>a+c[1],0)/ring.length).toFixed(6), cLon = (ring.reduce((a,c)=>a+c[0],0)/ring.length).toFixed(6);
+  const links = `<div style="margin-top:8px;font-size:12px;display:flex;gap:10px;flex-wrap:wrap">
+      <a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${cLat},${cLon}" target="_blank" rel="noopener" style="color:#1F5A8A;font-weight:700">Street View ↗</a>
+      <a href="https://www.google.com/maps/search/?api=1&query=${cLat},${cLon}" target="_blank" rel="noopener" style="color:#1F5A8A;font-weight:700">Google Maps ↗</a>
+      ${addr?`<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr+', TX')}" target="_blank" rel="noopener" style="color:#1F5A8A;font-weight:700">Search address ↗</a>`:''}
+    </div>`;
   return `<b>${esc(addr||'Lot '+(p.prop_id||''))}</b>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px;margin-top:6px">
       <span style="color:#5E5A53">Lot size</span><span><b style="display:inline">${acres!=null?acres.toFixed(3)+' ac':'—'}</b>${sqft?` · ${Math.round(sqft).toLocaleString()} sq ft`:''}</span>
@@ -420,6 +462,7 @@ function lotPopupHTML(p, geom){
       <span style="color:#5E5A53">Market value</span><span>${money(p.mkt_value)}${p.tax_year?' <span style="color:#5E5A53">('+esc(p.tax_year)+')</span>':''}</span>
       ${p.legal_desc?`<span style="color:#5E5A53">Legal</span><span style="font-size:11px">${esc(p.legal_desc)}</span>`:''}
     </div>
+    ${links}
     <small style="margin-top:6px">${esc(p.county||'')} County appraisal district via TxGIO StratMap${p.geo_id?' · '+esc(p.geo_id):''}. Dimensions are estimated from the parcel outline; verify with a survey.</small>`;
 }
 function firstSymbolLayer(){ const ls = map.getStyle().layers; const s = ls.find(l=> l.type==='symbol'); return s ? s.id : undefined; }
@@ -524,6 +567,10 @@ function buildLegend(){
   l.innerHTML = '<i></i>Lot lines &amp; sizes'; l.title='Show property lines when zoomed in; click a lot for size in acres, square feet and approximate dimensions';
   l.onclick = ()=>{ showLots=!showLots; l.setAttribute('aria-pressed', String(showLots)); if(map.getLayer('lots-fill')){ ['lots-fill','lots-line'].forEach(id=> map.setLayoutProperty(id,'visibility', showLots?'visible':'none')); } lotsKey=''; loadLots(); };
   legend.appendChild(l);
+  const a = document.createElement('button'); a.className='chip layer'; a.id='aerialToggle'; a.style.setProperty('--c', '#4E7D4A'); a.setAttribute('aria-pressed', String(showAerial));
+  a.innerHTML = '<i></i>Aerial view'; a.title = KEYS.esri ? 'Satellite/aerial imagery under the streets once zoomed in (Esri World Imagery)' : 'Aerial imagery — needs a free Esri key in data/config.json (README §6)';
+  a.onclick = ()=>{ setAerial(!showAerial); };
+  legend.appendChild(a);
 }
 function applyFilter(){
   legend.querySelectorAll('.chip[data-region]').forEach(c=>{
@@ -651,6 +698,7 @@ function renderTab(h){
 
 // ---------- external data (published alongside the page)
 async function loadData(){
+  try{ const r = await fetch('data/config.json'); if(r.ok){ const c = await r.json(); if(c.esri_api_key && !/^%%|YOUR/.test(c.esri_api_key)) KEYS.esri = String(c.esri_api_key).trim(); const t=document.getElementById('aerialToggle'); if(t && KEYS.esri) t.title='Satellite/aerial imagery under the streets once zoomed in (Esri World Imagery)'; } }catch(e){}
   try{ const r = await fetch('data/rate.json'); if(r.ok){ const c = await r.json(); ['rate','down','taxRate','insRate'].forEach(k=>{ if(typeof c[k]==='number') CONFIG[k]=c[k]; }); if(c.asof) CONFIG.asofRate = String(c.asof); } }catch(e){}
   try{ const r = await fetch('data/housing.json'); if(r.ok) HOUSING = await r.json(); }catch(e){}
   try{ const r = await fetch('data/schools.json'); if(r.ok) SCHOOLS = await r.json(); }catch(e){}
