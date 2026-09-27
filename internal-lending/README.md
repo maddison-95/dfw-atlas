@@ -66,6 +66,13 @@ source). That piece is a **Cloudflare Worker**, and it's free.
    - `NOTIFY_EMAIL` — your own inbox address, where registrations should land
    Save. Cloudflare shows the Worker's URL near the top of its page, something like
    `https://il-register.YOURSUBDOMAIN.workers.dev` — copy it.
+   **5b. Rate limiting (2 minutes, recommended).** Without this, one person clicking Register over and over
+   could use up Resend's 100-emails-a-day free allowance. Cloudflare dashboard → **Storage & Databases** →
+   **KV** → **Create** → name it `il-rate` → Create. Then back on the Worker: **Settings** → **Bindings** →
+   **Add** → **KV namespace** → Variable name exactly `RATE_KV`, namespace `il-rate` → Save (it redeploys).
+   That's it — the Worker now allows at most 5 registrations per hour from one connection, 3 per day per
+   email address, and 60 per day overall; over the limit it returns a plain-English message instead of
+   sending an email. If you skip this step everything still works, just without the caps.
 6. **Website — wire the two values into the page.** Edit `internal-lending/index.html` in this repo (GitHub's
    own web editor is fine for two small edits — click the file, pencil/edit icon, ⌘F or Ctrl+F to find each):
    - find `data-sitekey="%%TURNSTILE_SITE_KEY%%"` → replace `%%TURNSTILE_SITE_KEY%%` with the Site Key from

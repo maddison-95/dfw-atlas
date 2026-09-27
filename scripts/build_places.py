@@ -7,8 +7,10 @@ boundary files. All three sources are free, no key, no account.
 
 This is purely additive: the ~236 hand-curated Dallas-area neighborhoods already in data/geo.json,
 data/areas_meta.json and data/atlas.json are left completely alone. Anything whose name already
-exists anywhere in the atlas is skipped, so nothing collides with (or duplicates) the hand-tuned
-entries in the Richardson & Plano / Frisco / McKinney / Southlake / Rockwall areas.
+exists anywhere in the atlas is skipped -- as is any city the hand-curated shapes already cover
+(COVERED_CITIES below, plus every city named in an area title or region name), so a real Census
+"Coppell" or "Southlake" polygon never lands underneath the stylized neighborhoods drawn for it.
+New zips also get their real ZCTA outline added for the zip-code view.
 
 What it can't give you (be upfront about this in the delivered map): a hand-written blurb, a price
 tier, or a build-activity tag for ~150+ new places -- nobody's reviewed each of those individually.
@@ -87,14 +89,34 @@ def clean_district_name(name):
     return n
 
 
+# Cities the hand-curated map already covers with its own stylized neighborhood shapes. A Census polygon
+# for the same city would just sit underneath those shapes as a duplicate, so these are skipped even
+# though no neighborhood is literally named e.g. "Coppell". (Cities only partly covered -- Garland,
+# Carrollton, Lewisville -- are NOT listed, so they still get their real boundary added.)
+COVERED_CITIES = {
+    'dallas', 'highland park', 'university park', 'richardson', 'plano', 'murphy', 'frisco', 'prosper',
+    'celina', 'mckinney', 'allen', 'fairview', 'lucas', 'parker', 'southlake', 'westlake', 'colleyville',
+    'trophy club', 'roanoke', 'grapevine', 'coppell', 'irving', 'flower mound', 'highland village',
+    'double oak', 'bartonville', 'argyle', 'copper canyon', 'northlake', 'justin', 'rockwall', 'heath',
+    'mclendon-chisholm', 'fate', 'rowlett', 'sachse', 'sunnyvale', 'wylie',
+}
+
+
 def load_existing():
     geo = json.load(open(os.path.join(DATA, 'geo.json')))
     meta = json.load(open(os.path.join(DATA, 'areas_meta.json')))
     atlas = json.load(open(os.path.join(DATA, 'atlas.json')))
-    existing_names = set()
+    existing_names = set(COVERED_CITIES)
     for area in meta['areas'].values():
+        # every neighborhood name, plus each city named in an area title or region name
+        # ("Westlake, Trophy Club & Roanoke" -> westlake / trophy club / roanoke; "Northlake / Justin" -> both)
         for h in area['neighborhoods']:
             existing_names.add(h['name'].strip().lower())
+            for part in re.split(r'\s*(?:/|,|&|\band\b)\s*', h['name']):
+                if part.strip(): existing_names.add(part.strip().lower())
+        for label in [area.get('title', '')] + [r.get('name', '') for r in area['regions'].values()]:
+            for part in re.split(r'\s*(?:/|,|&|\band\b)\s*', label):
+                if part.strip(): existing_names.add(part.strip().lower())
     max_gid = max((f['properties']['gid'] for f in geo['hoods']['features']), default=-1)
     return geo, meta, atlas, existing_names, max_gid
 
@@ -198,6 +220,15 @@ def main():
     for p in places:
         by_area.setdefault(p['area_key'], []).append(p)
 
+    # real ZCTA outlines, so the zip-code view has a shape for every zip the new places introduce
+    # (the hand-curated areas use stylized zip blobs; these are the actual Census boundaries)
+    zcta_geom = {}
+    for rec, zg in zctas:
+        z = field(rec, 'ZCTA5CE20', 'ZCTA5CE10', 'ZCTA5CE', 'GEOID20', 'GEOID10')
+        if z: zcta_geom[str(z)] = zg
+    have_zip_shape = {(f['properties']['area'], f['properties']['zip']) for f in geo['zips']['features']}
+    added_zip_shapes = 0
+
     for area_key, plist in by_area.items():
         A = meta['areas'][area_key]
         if NEW_REGION_KEY not in A['regions']:
@@ -216,6 +247,12 @@ def main():
             for z in p['zips']:
                 if z not in A['zips']:
                     A['zips'].append(z)
+                if (area_key, z) not in have_zip_shape and z in zcta_geom:
+                    zg = zcta_geom[z]; c = zg.centroid
+                    geo['zips']['features'].append({'type': 'Feature',
+                        'properties': {'zip': z, 'area': area_key, 'lat': round(c.y, 5), 'lon': round(c.x, 5)},
+                        'geometry': json.loads(json.dumps(zg.simplify(0.0005).__geo_interface__))})
+                    have_zip_shape.add((area_key, z)); added_zip_shapes += 1
             bounds = [min(bounds[0], p['bbox'][0]), min(bounds[1], p['bbox'][1]),
                       max(bounds[2], p['bbox'][2]), max(bounds[3], p['bbox'][3])]
             gid += 1
@@ -224,7 +261,7 @@ def main():
     json.dump(geo, open(os.path.join(DATA, 'geo.json'), 'w'), separators=(',', ':'))
     json.dump(meta, open(os.path.join(DATA, 'areas_meta.json'), 'w'))
     json.dump(atlas, open(os.path.join(DATA, 'atlas.json'), 'w'))
-    print(f'Added {len(places)} places across {len(by_area)} areas.')
+    print(f'Added {len(places)} places across {len(by_area)} areas, plus {added_zip_shapes} real zip outlines for the zip view.')
     print('Updated data/geo.json, data/areas_meta.json and data/atlas.json.')
     print('index.html embeds data/areas_meta.json at build time, so it still needs regenerating --')
     print('run assemble3.py next (the workflow does this automatically) and commit index.html too,')

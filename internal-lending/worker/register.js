@@ -18,8 +18,15 @@
  *
  * Only requests from ALLOWED_ORIGIN are allowed to call this (CORS) -- change it if your map's domain
  * ever changes.
+ *
+ * Optional but recommended -- rate limiting (needs one KV namespace bound as RATE_KV; README step 5b):
+ *   caps registrations at LIMITS.perIpPerHour from one IP, LIMITS.perEmailPerDay for one email, and
+ *   LIMITS.globalPerDay overall, so a person (or a script that somehow gets past Turnstile) can't burn
+ *   through Resend's free-tier daily email quota. Without the binding the Worker still works; it just
+ *   logs that limiting is off.
  */
 const ALLOWED_ORIGIN = 'https://maps.michaeladdison.ai';
+const LIMITS = { perIpPerHour: 5, perEmailPerDay: 3, globalPerDay: 60 };
 
 export default {
   async fetch(request, env) {
@@ -28,12 +35,18 @@ export default {
 
     let body;
     try { body = await request.json(); } catch (e) { return withCors(json({ ok: false, error: 'bad request body' }, 400)); }
-    const name = String(body.name || '').trim();
-    const email = String(body.email || '').trim();
-    const mobile = String(body.mobile || '').trim();
+    const name = String(body.name || '').trim().slice(0, 120);
+    const email = String(body.email || '').trim().toLowerCase().slice(0, 200);
+    const mobile = String(body.mobile || '').trim().slice(0, 40);
     const token = String(body.token || '');
     if (!name || !email || !mobile || !token) return withCors(json({ ok: false, error: 'all fields are required' }, 400));
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return withCors(json({ ok: false, error: 'that email address doesn’t look right' }, 400));
+    if ((mobile.match(/\d/g) || []).length < 10) return withCors(json({ ok: false, error: 'please enter a full 10-digit mobile number' }, 400));
+
+    // 0) rate limits (before spending a Turnstile verification or an email on it)
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const limited = await overLimit(env, ip, email);
+    if (limited) return withCors(json({ ok: false, error: limited }, 429));
 
     // 1) verify the captcha server-side (this is the step a pure client-side check can't do honestly --
     //    only the Turnstile secret key, held here, can confirm the token is real and unused)
@@ -47,6 +60,9 @@ export default {
     });
     const verify = await verifyRes.json();
     if (!verify.success) return withCors(json({ ok: false, error: 'captcha check failed -- please try again' }, 400));
+
+    // count it only once the captcha passed (so a bot hammering with junk tokens can't lock out a real person's IP)
+    await bump(env, ip, email);
 
     // 2) email Michael the registration (best-effort -- a failed email should never be the reason a
     //    real person can't get in, so this never blocks the ok:true response below)
@@ -69,6 +85,32 @@ export default {
     return withCors(json({ ok: true }));
   },
 };
+
+// --- rate limiting on KV. Keys expire on their own (TTL), so nothing accumulates.
+function keys(ip, email) {
+  const day = new Date().toISOString().slice(0, 10);
+  const hour = new Date().toISOString().slice(0, 13);
+  return { ip: `ip:${ip}:${hour}`, email: `em:${email}:${day}`, all: `all:${day}` };
+}
+async function overLimit(env, ip, email) {
+  if (!env.RATE_KV) { console.log('RATE_KV not bound -- rate limiting off'); return null; }
+  try {
+    const k = keys(ip, email);
+    const [a, b, c] = await Promise.all([env.RATE_KV.get(k.ip), env.RATE_KV.get(k.email), env.RATE_KV.get(k.all)]);
+    if ((+a || 0) >= LIMITS.perIpPerHour) return 'too many registrations from this connection -- try again in an hour';
+    if ((+b || 0) >= LIMITS.perEmailPerDay) return 'this email has already registered today -- if the page still asks you to register, clear this site’s data or use another browser';
+    if ((+c || 0) >= LIMITS.globalPerDay) return 'registration is paused for today -- please try again tomorrow';
+  } catch (e) { console.log('rate check failed (allowing):', e); }
+  return null;
+}
+async function bump(env, ip, email) {
+  if (!env.RATE_KV) return;
+  try {
+    const k = keys(ip, email);
+    const inc = async (key, ttl) => { const v = (+(await env.RATE_KV.get(key)) || 0) + 1; await env.RATE_KV.put(key, String(v), { expirationTtl: ttl }); };
+    await Promise.all([inc(k.ip, 3600), inc(k.email, 86400), inc(k.all, 86400)]);
+  } catch (e) { console.log('rate bump failed:', e); }
+}
 
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });

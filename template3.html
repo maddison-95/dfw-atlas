@@ -216,6 +216,7 @@ const byGid = {}; AREA_ORDER.forEach(k=> META.areas[k].neighborhoods.forEach(h=>
 let layer = 'hood', regionFilter = null, selected = null, tab = 'overview', showBuild = false, showSchools = true;
 let hoverGid = null, geoLoaded = false, showLots = true, lotsBusy = null, lotsKey = '', hoverLot = null;
 let schoolLevel = 'ES', schoolTypes = {public:true, magnet:true, charter:true, private:true};
+// Defaults only -- data/rate.json overrides these at load (edit that file on GitHub when rates move; no code change)
 const CONFIG = { rate: 6.5, down: 20, taxRate: 2.2, insRate: 0.5, asofRate: '2026-09' };
 let HOUSING = {asof:null, zips:{}, neighborhoods:{}}, SCHOOLS = {asof:null, schools:[]}, LOTS = {asof:null, zips:{}, neighborhoods:{}};
 
@@ -248,12 +249,52 @@ function pickFonts(){ // use fonts the basemap style already ships, so glyphs ar
 // over exactly the streets and lots the click had just zoomed to).
 const opCase = (base, sel, hov) => ['case', ['boolean',['feature-state','dim'],false], 0.10, ['boolean',['feature-state','selected'],false], sel, ['boolean',['feature-state','hover'],false], hov, base];
 const FILL_OPACITY = ['interpolate',['linear'],['zoom'], 9, opCase(0.5,0.62,0.58), 13, opCase(0.32,0.5,0.45), 16, opCase(0.14,0.22,0.2), 18, opCase(0.06,0.1,0.1)];
+// ---------- basemap tuning (OpenFreeMap "positron" layer ids; every change is guarded so a style update
+// that renames a layer just skips that tweak instead of breaking the page)
+function tuneBasemap(){
+  const L = id => map.getLayer(id) ? id : null;
+  const style = map.getStyle(); const byId = id => style.layers.find(l=>l.id===id);
+  const cls = (...c) => ['match',['get','class'],c,true,false];
+  const line = ['match',['geometry-type'],['LineString','MultiLineString'],true,false];
+  // 1) Broad view shows only the highways and loops. Local streets appear from z13, secondary/tertiary
+  //    roads from z12.5, primaries from z11; motorways/trunks (I-635, I-35E, US-75, DNT, PGBT, SH-121,
+  //    Loop 12 ...) always.
+  if(L('highway_minor')) map.setLayerZoomRange('highway_minor', 13, 24);
+  if(L('highway_path')) map.setLayerZoomRange('highway_path', 14, 24);
+  ['highway_major_casing','highway_major_inner'].forEach(id=>{
+    const orig = byId(id); if(!orig) return;
+    // clone for secondary/tertiary, shown later; original keeps trunk/primary
+    const clone = JSON.parse(JSON.stringify(orig)); clone.id = id+'_local'; clone.minzoom = 12.5;
+    clone.filter = ['all', line, cls('secondary','tertiary')];
+    if(!map.getLayer(clone.id)) map.addLayer(clone, id);
+    map.setFilter(id, ['all', line, cls('primary','trunk')]);
+  });
+  if(L('highway_major_subtle')) map.setFilter('highway_major_subtle', ['all', line, cls('trunk','primary')]);
+  // motorways a touch darker/wider so the loops read as the map's skeleton when zoomed out
+  ['highway_motorway_inner','highway_motorway_bridge_inner'].forEach(id=>{ if(L(id)){ map.setPaintProperty(id,'line-color','#CFC6B8'); map.setPaintProperty(id,'line-width',['interpolate',['exponential',1.4],['zoom'],7,1.2,10,2.6,13,5,16,10,20,22]); } });
+  ['highway_motorway_casing','highway_motorway_bridge_casing'].forEach(id=>{ if(L(id)){ map.setPaintProperty(id,'line-color','#B9AF9E'); map.setPaintProperty(id,'line-width',['interpolate',['exponential',1.4],['zoom'],7,2.2,10,4,13,7,16,13,20,26]); } });
+  if(L('highway_major_inner')) map.setPaintProperty('highway_major_inner','line-color','#E7E1D6');
+  // 2) City / town names: uppercase, bold, dark, strong halo -- so they read as a different thing from the
+  //    Title Case neighborhood labels and stay legible when zoomed out.
+  const cityFont = FONT; // bold face the style ships
+  const place = (id, size) => { if(!L(id)) return;
+    map.setLayoutProperty(id,'text-size', size); map.setLayoutProperty(id,'text-transform','uppercase'); map.setLayoutProperty(id,'text-letter-spacing',0.08); map.setLayoutProperty(id,'text-font',cityFont);
+    map.setPaintProperty(id,'text-color','#1F1B16'); map.setPaintProperty(id,'text-halo-color','rgba(255,255,255,.95)'); map.setPaintProperty(id,'text-halo-width',2.2); };
+  place('label_city',   ['interpolate',['linear'],['zoom'], 8,14, 10,18, 12,21, 14,22]);
+  place('label_town',   ['interpolate',['linear'],['zoom'], 8,11, 10,14, 12,17, 14,18]);
+  place('label_village',['interpolate',['linear'],['zoom'], 9,10, 11,12, 13,14]);
+  if(L('label_other')) map.setLayerZoomRange('label_other', 12, 24);   // hamlets/suburb POIs only once zoomed in
+}
 function addLayers(geo){
   map.addSource('hoods', {type:'geojson', data: geo.hoods, promoteId: 'gid'});
   map.addSource('zips', {type:'geojson', data: geo.zips});
   map.addSource('schools', {type:'geojson', data: schoolsGeo()});
   pickFonts();
+  try{ tuneBasemap(); }catch(e){ console.warn('basemap tuning skipped', e); }
   const beforeId = firstSymbolLayer();
+  // place-name layers (city/town) sit above neighborhood + school labels so city names win collisions
+  // when zoomed out; anything of ours goes below them but above street names and road shields
+  const placeId = (map.getStyle().layers.find(l=> l['source-layer']==='place')||{}).id;
   const TEXT = !window.__NO_TEXT__;
   map.addLayer({id:'hoods-fill', type:'fill', source:'hoods', paint:{
     'fill-color': ['get','color'],
@@ -285,21 +326,22 @@ function addLayers(geo){
     }}, beforeId);
   }
   // neighborhood labels: bigger areas win collisions; more appear as you zoom in
-  if(TEXT) map.addLayer({id:'hoods-label', type:'symbol', source:'hoods', layout:{
+  // from z10.5 only (below that the city names carry the map); below city/town names, above street names
+  if(TEXT) map.addLayer({id:'hoods-label', type:'symbol', source:'hoods', minzoom: 10.5, layout:{
     'text-field':['get','name'], 'text-font':FONT, 'symbol-sort-key':['-',0,['get','sqmi']],
-    'text-size':['interpolate',['linear'],['zoom'], 9, 9, 11, 13, 13, 18, 15, 24],
+    'text-size':['interpolate',['linear'],['zoom'], 10.5, 10, 11.5, 12.5, 13, 18, 15, 24],
     'text-max-width': 8, 'text-padding': 6, 'text-letter-spacing': 0.02
   }, paint:{'text-color':'#2A2622','text-halo-color':'rgba(255,255,255,.85)','text-halo-width':1.8,
-    'text-opacity': ['case', ['boolean',['feature-state','dim'],false], 0.25, 1]}});
-  // schools
+    'text-opacity': ['case', ['boolean',['feature-state','dim'],false], 0.25, 1]}}, placeId);
+  // schools: dots below every label, names below city/neighborhood names
   map.addLayer({id:'schools-dot', type:'circle', source:'schools', minzoom: 10, paint:{
     'circle-color': ['match',['get','type'],'magnet',SCHOOL_COLORS.magnet,'charter',SCHOOL_COLORS.charter,'private',SCHOOL_COLORS.private,SCHOOL_COLORS.public],
     'circle-radius': ['interpolate',['linear'],['zoom'], 10, 2.5, 12, 4.5, 14, 7, 17, 10],
     'circle-stroke-color':'#FFFFFF', 'circle-stroke-width': ['interpolate',['linear'],['zoom'], 10, 0.8, 14, 1.8], 'circle-opacity': .95
-  }});
+  }}, beforeId);
   if(TEXT) map.addLayer({id:'schools-label', type:'symbol', source:'schools', minzoom: 13, layout:{
     'text-field':['get','name'], 'text-font':FONT_REG, 'text-size':['interpolate',['linear'],['zoom'],13,10,16,13], 'text-offset':[0,1.1], 'text-anchor':'top', 'text-max-width': 10, 'text-optional': true
-  }, paint:{'text-color':'#2A2622','text-halo-color':'rgba(255,255,255,.9)','text-halo-width':1.4}});
+  }, paint:{'text-color':'#2A2622','text-halo-color':'rgba(255,255,255,.9)','text-halo-width':1.4}}, TEXT && map.getLayer('hoods-label') ? 'hoods-label' : placeId);
   // lots (parcels) — loaded on demand for the visible area once zoomed in
   map.addSource('lots', {type:'geojson', data:{type:'FeatureCollection', features:[]}, promoteId:'prop_id'});
   // drawn above the neighborhood tint (but below its outline) so lot lines are never washed out by it
@@ -609,6 +651,7 @@ function renderTab(h){
 
 // ---------- external data (published alongside the page)
 async function loadData(){
+  try{ const r = await fetch('data/rate.json'); if(r.ok){ const c = await r.json(); ['rate','down','taxRate','insRate'].forEach(k=>{ if(typeof c[k]==='number') CONFIG[k]=c[k]; }); if(c.asof) CONFIG.asofRate = String(c.asof); } }catch(e){}
   try{ const r = await fetch('data/housing.json'); if(r.ok) HOUSING = await r.json(); }catch(e){}
   try{ const r = await fetch('data/schools.json'); if(r.ok) SCHOOLS = await r.json(); }catch(e){}
   try{ const r = await fetch('data/lot_stats.json'); if(r.ok) LOTS = await r.json(); }catch(e){}

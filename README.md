@@ -1,4 +1,4 @@
-# DFW Neighborhood Atlas — site bundle (v10: review fixes)
+# DFW Neighborhood Atlas — site bundle (v11: cleaner broad view, city names, review follow-ups)
 
 This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and the scripts
 that refresh the data (mostly run automatically by GitHub Actions).
@@ -14,6 +14,8 @@ data/atlas.json          a slimmer neighborhood list the refresh scripts read �
 data/housing.json        home values, rents, sales, Census figures — written by scripts/refresh_housing.py
 data/schools.json        schools with level, type, location, TEA rating — written by scripts/refresh_schools.py
 data/lot_stats.json      median lot size/value/home age per neighborhood — written by scripts/refresh_lots.py
+data/rate.json           the rate / down payment / tax / insurance assumptions behind the payment estimate —
+                          EDIT THIS ON GITHUB WHEN RATES MOVE (no code change needed)
 data-sources/            the two files you download by hand (TEA ratings, NCES private schools)
 scripts/                 the refresh scripts
 .github/workflows/       the automated refresh jobs (GitHub Actions)
@@ -25,6 +27,30 @@ internal-lending/worker/register.js   the Cloudflare Worker source that checks t
                           each registration — deploy it per internal-lending/README.md's setup steps.
 robots.txt               tells search engines to skip internal-lending/
 ```
+
+## What's new in v11
+* **Cleaner broad view.** Zoomed out, the street map now shows only the highways and loops (I-635, I-35E,
+  US-75, DNT, PGBT, SH-121, Loop 12 …), drawn a little darker so they read as the skeleton of the region.
+  Primary roads appear from ~z11, secondary/tertiary from z12.5, local streets from z13 — so neighborhood
+  shapes and names aren't fighting a gray tangle of streets.
+* **City and town names stand out.** They're now UPPERCASE, bold and larger with a strong halo, so they read as
+  a different kind of label from the Title Case neighborhood names — and they win when a city name and a
+  neighborhood label would collide when zoomed out. Neighborhood labels start at z10.5 (they were unreadable
+  9px specks below that anyway).
+* **Payment-estimate rate lives in `data/rate.json`** — edit it on GitHub when rates move; no code change.
+* **Registration Worker rate-limits** (5/hour per connection, 3/day per email, 60/day overall) so nobody can
+  burn through Resend's daily email quota — one extra 2-minute setup step (a free KV namespace),
+  `internal-lending/README.md` step 5b. Also validates a 10-digit mobile number.
+* **Full-county-coverage job no longer duplicates hand-curated cities** (Coppell, Grapevine, Irving, Southlake,
+  the corridor towns …) underneath their stylized shapes, and now adds real Census zip outlines for every new
+  zip so the zip-code view covers auto-added places too.
+* **Corridor school districts verified** against district/town sources: Hackberry Creek was wrong (it's
+  Carrollton-Farmers Branch ISD, not Coppell); Las Colinas and Cottonwood Valley are Irving / C-FB ISD by
+  street; Bartonville = Argyle / Denton ISD; Canyon Falls = Northwest / Argyle ISD by village; Double Oak,
+  Flower Mound, Highland Village = Lewisville ISD; Copper Canyon = Lewisville ISD with a Denton ISD west edge.
+  Tier and build-activity tags remain a general-knowledge starting point.
+* Neighborhood labels and school dots now sit *below* the basemap's place names (and school dots below all
+  text), instead of on top of everything.
 
 ## What's new in v10 (code review pass)
 * **Lender disclosures now show on phones.** The Equal Housing Lender / NMLS footer was hidden below 900px
