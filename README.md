@@ -17,6 +17,10 @@ data/lot_stats.json      median lot size/value/home age per neighborhood — wri
 data-sources/            the two files you download by hand (TEA ratings, NCES private schools)
 scripts/                 the refresh scripts
 .github/workflows/       the automated refresh jobs (GitHub Actions)
+internal-lending/        a SEPARATE, passphrase-gated, non-public page for lending-market signals — not part
+                          of the public map, not linked from it. Read internal-lending/README.md before you
+                          share that link with anyone.
+robots.txt               tells search engines to skip internal-lending/
 ```
 
 ## What's new in v6

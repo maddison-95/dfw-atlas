@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Lending signals — internal</title>
+<style>
+  :root{ --bg:#F4F1EA; --panel:#FFFFFF; --line:#E4DFD3; --ink:#241F19; --dim:#6B6459; --accent:#B0473A; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+  header{padding:20px 24px 8px}
+  h1{font-size:20px;margin:0 0 4px}
+  .warn{background:#FBECEA;border:1px solid #E7C6C1;color:#7A2E24;border-radius:8px;padding:8px 12px;font-size:13px;margin:0 24px 16px;max-width:900px}
+  main{padding:0 24px 60px;max-width:900px}
+  table{border-collapse:collapse;width:100%;margin:12px 0 28px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:8px 12px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  thead th{background:#EFEAE0;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--dim)}
+  tbody tr:last-child td{border-bottom:none}
+  .bars{margin:8px 0 28px}
+  .bar-row{display:flex;align-items:center;gap:10px;margin:6px 0}
+  .bar-label{width:90px;font-size:13px;flex:none}
+  .bar-track{flex:1;background:#EFEAE0;border-radius:5px;height:18px;position:relative}
+  .bar-fill{background:var(--accent);height:100%;border-radius:5px}
+  .bar-val{width:110px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums;flex:none}
+  .note{color:var(--dim);font-size:12.5px;margin:4px 0 24px;max-width:760px}
+  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:20}
+  .gate form{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px;width:min(360px,90vw);text-align:center}
+  .gate input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px;margin:14px 0}
+  .gate button{width:100%;padding:10px;border:0;border-radius:8px;background:var(--ink);color:#fff;font-weight:700;font-size:14px;cursor:pointer}
+  .gate .err{color:var(--accent);font-size:13px;height:18px}
+  .pending{color:var(--dim)}
+  section h2{font-size:15px;margin:24px 0 4px}
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+  <form id="gateForm">
+    <div style="font-weight:800;font-size:16px;margin-bottom:2px">Internal — lending signals</div>
+    <div style="color:var(--dim);font-size:13px">Not part of the public site. Enter the passphrase.</div>
+    <input type="password" id="gatePass" autocomplete="off" placeholder="Passphrase">
+    <button type="submit">Enter</button>
+    <div class="err" id="gateErr"></div>
+  </form>
+</div>
+
+<header>
+  <h1>DFW lending signals — internal</h1>
+  <div style="color:var(--dim);font-size:13px">Aggregate HMDA lending activity for the 5 atlas counties. For Michael's own deal-sourcing use — not the public map.</div>
+</header>
+<div class="warn">
+  <b>Internal use only.</b> Not linked from the public map, not search-indexed. This page shows only aggregate
+  loan counts and dollar volume by county and loan type — the same figures anyone can pull from the CFPB's own
+  public HMDA data browser. It never requests or displays race, ethnicity, sex, or any other applicant-level
+  or lender-identifying detail.
+</div>
+<main>
+  <section id="content"><p class="pending">Loading…</p></section>
+</main>
+
+<script>
+// --- passphrase gate --------------------------------------------------
+// This is a speed bump, not real security: it's client-side JS on a static page, so anyone who views
+// source (or already has the URL) can see the hash below and work around it. It exists only so the
+// page isn't sitting wide open while nobody knows the link. If this page ever needs real access
+// control (shared with more people, or the URL leaks), that needs a proper server-side login -- a
+// static host like GitHub Pages can't do that on its own; tell Claude and we'll look at options
+// (e.g. Cloudflare Access in front of the domain).
+//
+// To change the passphrase: pick a new one, run this in any browser console, and paste the result
+// below in place of HASH:
+//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('your new passphrase')).then(b=>console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+const HASH = '638f94ccc3cbbe2298fd9199e4a1f7a4ea2e4799b235a2a9ce17fe3265593a26'; // default passphrase: dfw-signals-26 -- change this, see README
+async function checkPass(pass){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pass));
+  const hex = [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+  return hex === HASH;
+}
+const gate = document.getElementById('gate');
+if(sessionStorage.getItem('il_ok')==='1') gate.style.display='none';
+document.getElementById('gateForm').onsubmit = async (e)=>{
+  e.preventDefault();
+  const ok = await checkPass(document.getElementById('gatePass').value);
+  if(ok){ sessionStorage.setItem('il_ok','1'); gate.style.display='none'; }
+  else { document.getElementById('gateErr').textContent = 'Not it — try again.'; }
+};
+
+// --- data ---------------------------------------------------------------
+const fmt$ = v => v==null?'—':'$'+Math.round(v).toLocaleString();
+const fmtN = v => v==null?'—':Math.round(v).toLocaleString();
+const ORDER = ['48113','48085','48121','48439','48397'];
+
+fetch('data/hmda_stats.json').then(r=>r.ok?r.json():null).then(d=>{
+  const el = document.getElementById('content');
+  if(!d || !d.counties || !Object.keys(d.counties).length){
+    el.innerHTML = `<p class="note">No data yet — run the "Refresh lending signals" GitHub Action, or it hasn't completed its first run.</p>`;
+    return;
+  }
+  const rows = ORDER.map(f=>d.counties[f]).filter(Boolean);
+  const purposeRows = rows.map(c=>`<tr><td>${c.name}</td>
+      <td>${fmtN(c['Home purchase']?.count)}</td><td>${fmt$(c['Home purchase']?.sum)}</td>
+      <td>${fmtN(c['Refinance']?.count)}</td><td>${fmt$(c['Refinance']?.sum)}</td>
+      <td>${fmtN(c['Cash-out refinance']?.count)}</td><td>${fmt$(c['Cash-out refinance']?.sum)}</td></tr>`).join('');
+  const constructionRows = rows.map(c=>{
+    const sb = c['Site-built']?.count||0, mh = c['Manufactured home']?.count||0, tot = sb+mh;
+    return `<tr><td>${c.name}</td><td>${fmtN(sb)}</td><td>${fmtN(mh)}</td><td>${tot?((mh/tot)*100).toFixed(1)+'%':'—'}</td></tr>`;
+  }).join('');
+  const maxPurchase = Math.max(...rows.map(c=>c['Home purchase']?.sum||0));
+  const bars = rows.map(c=>{
+    const v = c['Home purchase']?.sum||0; const pct = maxPurchase? (v/maxPurchase*100):0;
+    return `<div class="bar-row"><div class="bar-label">${c.name}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div><div class="bar-val">${fmt$(v)}</div></div>`;
+  }).join('');
+  el.innerHTML = `
+    <p class="note">HMDA year ${d.year||'—'} · data pulled ${d.asof||'—'} · source: ${d.source||''}</p>
+    <section>
+      <h2>Originated home-purchase $ volume by county</h2>
+      <div class="bars">${bars}</div>
+    </section>
+    <section>
+      <h2>Originated loans by purpose</h2>
+      <table><thead><tr><th>County</th><th>Purchase #</th><th>Purchase $</th><th>Refi #</th><th>Refi $</th><th>Cash-out #</th><th>Cash-out $</th></tr></thead>
+      <tbody>${purposeRows}</tbody></table>
+    </section>
+    <section>
+      <h2>Site-built vs. manufactured (all originated loans)</h2>
+      <table><thead><tr><th>County</th><th>Site-built #</th><th>Manufactured #</th><th>% manufactured</th></tr></thead>
+      <tbody>${constructionRows}</tbody></table>
+      <p class="note">"Manufactured home" is HMDA's construction-method field — not the same as a new-construction
+        loan; HMDA doesn't carry a distinct new-construction category, so this can't yet show teardown/rebuild
+        or spec-build activity specifically. Per-lender detail (who's originating this volume) isn't built yet
+        either — it needs an extra lookup step to turn each loan's lender ID into a name.</p>
+    </section>`;
+}).catch(()=>{ document.getElementById('content').innerHTML = '<p class="note">Could not load data/hmda_stats.json.</p>'; });
+</script>
+</body>
+</html>

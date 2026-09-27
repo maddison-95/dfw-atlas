@@ -1,4 +1,4 @@
-name: Refresh housing + schools + lot data
+name: Refresh housing + schools + lot + lending data
 on:
   schedule:
     - cron: "17 9 3 * *"      # 3rd of each month, 09:17 UTC (Zillow posts mid-month; this catches the prior release)
@@ -20,10 +20,12 @@ jobs:
         run: python scripts/refresh_schools.py --ratings data-sources/tea_ratings.csv --private data-sources/pss.csv
       - name: Build lot_stats.json
         run: python scripts/refresh_lots.py
+      - name: Build internal lending-signals data (not part of the public map)
+        run: python scripts/build_hmda.py
       - name: Commit if changed
         run: |
           git config user.name "atlas-bot"
           git config user.email "atlas-bot@users.noreply.github.com"
-          git add data/housing.json data/schools.json data/lot_stats.json
-          git diff --cached --quiet || git commit -m "Refresh housing + schools + lot data $(date -u +%F)"
+          git add data/housing.json data/schools.json data/lot_stats.json internal-lending/data/hmda_stats.json
+          git diff --cached --quiet || git commit -m "Refresh housing + schools + lot + lending data $(date -u +%F)"
           git push
