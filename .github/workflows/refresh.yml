@@ -1,4 +1,4 @@
-name: Refresh housing data
+name: Refresh housing + schools data
 on:
   schedule:
     - cron: "17 9 3 * *"      # 3rd of each month, 09:17 UTC (Zillow posts mid-month; this catches the prior release)
@@ -16,10 +16,12 @@ jobs:
         env:
           CENSUS_KEY: ${{ secrets.CENSUS_KEY }}
         run: python scripts/refresh_housing.py --census-key "$CENSUS_KEY"
+      - name: Build schools.json
+        run: python scripts/refresh_schools.py --ratings data-sources/tea_ratings.csv --private data-sources/pss.csv
       - name: Commit if changed
         run: |
           git config user.name "atlas-bot"
           git config user.email "atlas-bot@users.noreply.github.com"
-          git add data/housing.json
-          git diff --cached --quiet || git commit -m "Refresh housing data $(date -u +%F)"
+          git add data/housing.json data/schools.json
+          git diff --cached --quiet || git commit -m "Refresh housing + schools data $(date -u +%F)"
           git push
