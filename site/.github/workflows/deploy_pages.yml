@@ -1,0 +1,62 @@
+name: Deploy site (GitHub Pages)
+# Publishes this repository as the live site. It replaces GitHub's "Deploy from a branch" setting, for one
+# reason: the parcel tiles (data/parcels.pmtiles, several hundred MB) can't be committed to git (100 MB file
+# limit) but CAN be part of a site deployed this way. This workflow checks out main, adds the tile file from
+# the "parcels-data" release the parcels workflow maintains, and deploys the lot -- so the page serves the
+# tiles from its own address (data/parcels.pmtiles), same origin as everything else.
+#
+# ONE-TIME SETUP: repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions" (instead of
+# "Deploy from a branch"). The custom domain setting is untouched. That's it.
+#
+# Runs on every push to main, on demand, and after any data-refresh workflow finishes (those commit with the
+# built-in token, which never triggers 'push' workflows -- hence the workflow_run list; add any new refresh
+# workflow's name here).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+  workflow_run:
+    workflows:
+      - "Refresh parcel data (self-hosted lots)"
+      - "Refresh housing + schools + lot + lending data"
+      - "Add full county coverage (manual, occasional)"
+    types: [completed]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    # after a refresh workflow: only deploy if it succeeded (a failed refresh commits nothing new anyway)
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+
+      - name: Add the parcel tiles from the parcels-data release (skipped if none has been built yet)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release download parcels-data --pattern parcels.pmtiles --dir data --clobber 2>/dev/null; then
+            ls -lh data/parcels.pmtiles
+          else
+            echo "No parcels-data release yet: the site deploys without lot tiles. Run 'Refresh parcel data' once to add them."
+          fi
+
+      - name: Leave out what isn't part of the site
+        run: |
+          rm -rf scripts .github vendor/*.map 2>/dev/null || true
+          du -sh . ; du -sh data
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: . }
+      - id: deployment
+        uses: actions/deploy-pages@v4

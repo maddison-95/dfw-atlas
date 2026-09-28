@@ -1,0 +1,114 @@
+name: Refresh parcel data (self-hosted lots)
+# Builds the map's "Lot lines & sizes" layer -- every parcel in Dallas, Collin, Denton, Tarrant and Rockwall
+# counties, with address, size, value and year built -- from the Texas Geographic Information Office's bulk
+# StratMap Land Parcels downloads (one zip per county, CC0). scripts/build_parcels.py downloads and normalizes
+# them, tippecanoe tiles them into ONE file (parcels.pmtiles), and that file is stored on this repo's own
+# "parcels-data" GitHub Release. The "Deploy site" workflow then copies it into the published site as
+# data/parcels.pmtiles, so the page reads lot lines and click data from its own origin -- no live lookups,
+# no third-party server in the visitor's path. (Until v15 the page queried TxGIO's live ArcGIS service per pan;
+# that service stopped answering queries in Sept 2026, which is what emptied the lot popups.)
+#
+# The same parcel file also produces data/lot_stats.json (median lot size / land value / home age per
+# neighborhood and zip), which used to be one live query per neighborhood in the monthly refresh.
+#
+# Schedule: a quarterly CHECK. TxGIO publishes a new statewide release about once a year; the script compares
+# the newest release to data/parcels_source.json and downloads nothing if it's the one already built. Tick
+# "force" to rebuild anyway (after a change to the scripts, say).
+on:
+  schedule:
+    - cron: "0 8 5 1,4,7,10 *"   # 5th of Jan/Apr/Jul/Oct, 08:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: list the newest release's county files, download only the smallest county, print its field names + 3 sample records; publish nothing"
+        type: boolean
+        default: false
+      force:
+        description: "Force: rebuild even if TxGIO has not published a newer release since the last build"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: parcels
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install GDAL (reads the county geodatabases), tippecanoe (builds the tiles) and shapely (lot stats)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gdal-bin tippecanoe
+          pip install -q shapely numpy
+          ogr2ogr --version && tippecanoe --version
+
+      - name: Dry run -- newest release, smallest county's fields + sample rows only
+        if: ${{ inputs.dry_run == true }}
+        run: python scripts/build_parcels.py --dry-run --work "$RUNNER_TEMP"
+
+      - name: Download + normalize the five counties (skipped if already built from TxGIO's newest release)
+        id: pull
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          python scripts/build_parcels.py --out "$RUNNER_TEMP/parcels.ndjson" --work "$RUNNER_TEMP" \
+            --meta data/parcels_source.json --skip-if-current data/parcels_source.json \
+            ${{ inputs.force == true && '--force' || '' }}
+          ls -lh "$RUNNER_TEMP/parcels.ndjson" 2>/dev/null || true
+
+      - name: Build the tiles (zoom 15 only -- the layer is hidden below that, and MapLibre over-zooms above it)
+        if: ${{ inputs.dry_run != true && steps.pull.outputs.skip != 'true' }}
+        run: |
+          set -e
+          build () {   # $1 = output, rest = extra tippecanoe args
+            out="$1"; shift
+            tippecanoe -q -o "$out" -l lots -Z15 -z15 --detect-shared-borders --no-feature-limit --no-tile-size-limit \
+              -f "$@" "$RUNNER_TEMP/parcels.ndjson"
+          }
+          build "$RUNNER_TEMP/parcels.pmtiles"
+          size=$(stat -c %s "$RUNNER_TEMP/parcels.pmtiles"); echo "tile file: $((size/1048576)) MB"
+          # GitHub Pages sites must stay under 1 GB in total. If the full file is too big, rebuild without the
+          # long text fields (legal description, land-use codes): lot lines, address, size, values and year built
+          # all stay. If even that is too big, stop -- the tiles then need a host with no size cap (README section 7).
+          if [ "$size" -gt 880000000 ]; then
+            echo "::warning::parcels.pmtiles is $((size/1048576)) MB; rebuilding without legal_desc / land-use / source fields to fit GitHub Pages"
+            build "$RUNNER_TEMP/parcels.pmtiles" -x legal_desc -x stat_land_use -x loc_land_use -x source
+            size=$(stat -c %s "$RUNNER_TEMP/parcels.pmtiles"); echo "tile file (trimmed): $((size/1048576)) MB"
+            python - <<'PY'
+          import json; p='data/parcels_source.json'; m=json.load(open(p)); m['trimmed_fields']=['legal_desc','stat_land_use','loc_land_use','source']; json.dump(m,open(p,'w'),indent=1)
+          PY
+          fi
+          if [ "$size" -gt 880000000 ]; then
+            echo "::error::parcels.pmtiles is still $((size/1048576)) MB -- too large for a GitHub Pages site (1 GB cap). See README section 7 for the alternate-host option. Nothing was published."
+            exit 1
+          fi
+          python - <<'PY'
+          import json,os; p='data/parcels_source.json'; m=json.load(open(p)); m['pmtiles_bytes']=os.path.getsize(os.environ['RUNNER_TEMP']+'/parcels.pmtiles'); json.dump(m,open(p,'w'),indent=1)
+          PY
+
+      - name: Lot statistics per neighborhood and zip (data/lot_stats.json) from the same parcel file
+        if: ${{ inputs.dry_run != true && steps.pull.outputs.skip != 'true' }}
+        run: python scripts/refresh_lots.py --parcels "$RUNNER_TEMP/parcels.ndjson" --meta data/parcels_source.json
+
+      - name: Store the tile file on the parcels-data release (the deploy workflow reads it from there)
+        if: ${{ inputs.dry_run != true && steps.pull.outputs.skip != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete parcels-data --yes --cleanup-tag 2>/dev/null || true
+          gh release create parcels-data "$RUNNER_TEMP/parcels.pmtiles" \
+            --title "Parcel tiles (Dallas, Collin, Denton, Tarrant, Rockwall)" \
+            --notes "Built $(date -u +%F) by the 'Refresh parcel data' workflow from TxGIO StratMap Land Parcels (county appraisal district rolls, CC0). Source details: data/parcels_source.json. The 'Deploy site' workflow copies this file into the published site as data/parcels.pmtiles; nothing needs to be pasted anywhere. Replaced wholesale by the next build."
+
+      - name: Commit the source description + lot statistics
+        if: ${{ inputs.dry_run != true && steps.pull.outputs.skip != 'true' }}
+        run: |
+          git config user.name "atlas-bot"
+          git config user.email "atlas-bot@users.noreply.github.com"
+          git add data/parcels_source.json data/lot_stats.json
+          git diff --cached --quiet || git commit -m "Parcel tiles + lot statistics rebuilt from TxGIO StratMap ($(date -u +%F))"
+          git push
+          echo "Done. The 'Deploy site (GitHub Pages)' workflow now runs automatically and publishes data/parcels.pmtiles with the page."

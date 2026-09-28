@@ -1,0 +1,254 @@
+area,neighborhood,action,city,old_sqmi,new_sqmi,pct_removed,note
+dallas,Downtown,clipped to city,Dallas,0.4,0.4,0,
+dallas,Arts District,clipped to city,Dallas,0.35,0.35,0,
+dallas,West End,clipped to city,Dallas,0.74,0.74,0,
+dallas,Deep Ellum,clipped to city,Dallas,0.45,0.45,0,
+dallas,The Cedars,clipped to city,Dallas,1.53,1.53,0,
+dallas,Farmers Market,clipped to city,Dallas,0.48,0.48,0,
+dallas,Design District,clipped to city,Dallas,0.96,0.96,0,
+dallas,Victory Park,clipped to city,Dallas,0.62,0.62,0,
+dallas,Uptown,clipped to city,Dallas,0.39,0.39,0,
+dallas,State-Thomas,clipped to city,Dallas,0.41,0.41,0,
+dallas,Oak Lawn,clipped to city,Dallas,1.24,1.13,9,
+dallas,Turtle Creek,clipped to city,Dallas,0.41,0.41,0,
+dallas,Knox-Henderson,clipped to city,Dallas,0.86,0.7,19,trimmed at city line
+dallas,Cityplace / West Village,clipped to city,Dallas,0.94,0.94,0,
+dallas,Bryan Place,clipped to city,Dallas,0.51,0.51,0,
+dallas,Baylor District,clipped to city,Dallas,0.24,0.24,0,
+dallas,Old East Dallas,clipped to city,Dallas,0.48,0.48,0,
+dallas,Swiss Avenue,clipped to city,Dallas,0.13,0.13,0,
+dallas,Munger Place,clipped to city,Dallas,0.37,0.37,0,
+dallas,Junius Heights,clipped to city,Dallas,0.62,0.62,0,
+dallas,Peak's Suburban,clipped to city,Dallas,0.29,0.29,0,
+dallas,Lower Greenville,clipped to city,Dallas,0.3,0.3,0,
+dallas,Lowest Greenville,clipped to city,Dallas,0.38,0.38,0,
+dallas,Vickery Place,clipped to city,Dallas,0.54,0.46,14,
+dallas,Belmont,clipped to city,Dallas,0.73,0.73,0,
+dallas,M Streets,clipped to city,Dallas,0.8,0.7,13,
+dallas,Lakewood,clipped to city,Dallas,2.58,2.58,0,
+dallas,Lakewood Heights,clipped to city,Dallas,0.6,0.6,0,
+dallas,Hollywood / Santa Monica,clipped to city,Dallas,0.75,0.75,0,
+dallas,Lake Park Estates,clipped to city,Dallas,0.74,0.74,0,
+dallas,Forest Hills,clipped to city,Dallas,1.05,1.05,0,
+dallas,Little Forest Hills,clipped to city,Dallas,0.24,0.24,0,
+dallas,Casa Linda,clipped to city,Dallas,2.3,2.3,0,
+dallas,Casa View,clipped to city,Dallas,7.52,7.45,1,
+dallas,Lochwood,clipped to city,Dallas,3.31,3.29,0,
+dallas,Old Lake Highlands,clipped to city,Dallas,1.16,1.16,0,
+dallas,Wilshire Heights,clipped to city,Dallas,0.58,0.58,0,
+dallas,Ridgewood Park,clipped to city,Dallas,1.39,1.39,0,
+dallas,University Meadows,clipped to city,Dallas,1.13,1.09,3,
+dallas,Buckner Terrace,clipped to city,Dallas,6.99,6.94,1,
+dallas,Lake Highlands,clipped to city,Dallas,5.04,5.03,0,
+dallas,L Streets,clipped to city,Dallas,1.96,1.96,0,
+dallas,Highland Meadows,clipped to city,Dallas,2.02,2.02,0,
+dallas,Hamilton Park,clipped to city,Dallas,5.15,5.12,1,
+dallas,Merriman Park,clipped to city,Dallas,2.96,2.96,0,
+dallas,Vickery Meadow,clipped to city,Dallas,2.61,2.6,0,
+dallas,Highland Park,town limits,Highland Park,1.67,2.24,,exact legal town boundary
+dallas,University Park,town limits,University Park,2.06,3.68,,exact legal town boundary
+dallas,Preston Hollow,clipped to city,Dallas,5.99,5.99,0,
+dallas,Preston Center,dropped,,1.34,0,100,not a neighborhood (shopping district)
+dallas,Bluffview,clipped to city,Dallas,1.48,1.48,0,
+dallas,Devonshire,clipped to city,Dallas,0.96,0.49,49,trimmed at city line
+dallas,Greenway Parks,clipped to city,Dallas,1.27,0.85,33,trimmed at city line
+dallas,Melshire Estates,clipped to city,Dallas,4.41,4.41,0,
+dallas,Northwood Hills,clipped to city,Dallas,3.68,3.68,0,
+dallas,Valley View / Midtown,clipped to city,Dallas,3.84,2.04,47,trimmed at city line
+dallas,Preston Highlands,clipped to city,Dallas,1.64,1.43,13,
+dallas,Prestonwood,clipped to city,Dallas,2.66,2.58,3,
+dallas,Bent Tree,clipped to city,Dallas,1.57,1.57,1,
+dallas,Far North Dallas,clipped to city,Dallas,12.0,11.9,1,
+dallas,Hillcrest Forest,clipped to city,Dallas,2.02,2.02,0,
+dallas,Love Field,clipped to city,Dallas,3.66,3.66,0,
+dallas,Elm Thicket-Northpark,clipped to city,Dallas,1.31,1.31,0,
+dallas,Arlington Park,clipped to city,Dallas,1.5,1.32,12,
+dallas,Medical District,clipped to city,Dallas,3.81,3.81,0,
+dallas,Midway Hollow,clipped to city,Dallas,3.01,3.01,0,
+dallas,Northaven Park,clipped to city,Dallas,2.73,2.73,0,
+dallas,Sparkman Club Estates,clipped to city,Dallas,2.6,1.84,29,trimmed at city line
+dallas,Bachman Lake,clipped to city,Dallas,2.8,2.8,0,
+dallas,Letot,clipped to city,Dallas,6.34,6.33,0,
+dallas,Webb Chapel,clipped to city,Dallas,3.9,3.9,0,
+dallas,Trinity Groves,clipped to city,Dallas,1.14,1.14,0,
+dallas,La Bajada,clipped to city,Dallas,1.04,1.04,0,
+dallas,Los Altos,clipped to city,Dallas,2.17,2.17,0,
+dallas,Ledbetter Gardens,clipped to city,Dallas,4.66,4.64,0,
+dallas,Westmoreland Heights,clipped to city,Dallas,1.47,1.47,0,
+dallas,Eagle Ford,clipped to city,Dallas,3.43,3.43,0,
+dallas,Western Heights,clipped to city,Dallas,1.68,1.68,0,
+dallas,Arcadia Park,clipped to city,Dallas,5.71,5.24,8,
+dallas,Cockrell Hill,town limits,Cockrell Hill,1.82,0.58,,exact legal town boundary
+dallas,Bishop Arts,clipped to city,Dallas,0.83,0.83,0,
+dallas,Kidd Springs,clipped to city,Dallas,1.15,1.15,0,
+dallas,Kessler Park,clipped to city,Dallas,0.49,0.49,0,
+dallas,Stevens Park,clipped to city,Dallas,0.49,0.49,0,
+dallas,Winnetka Heights,clipped to city,Dallas,0.52,0.52,0,
+dallas,L.O. Daniel,clipped to city,Dallas,2.53,2.53,0,
+dallas,Lake Cliff,clipped to city,Dallas,1.3,1.3,0,
+dallas,Elmwood,clipped to city,Dallas,1.22,1.22,0,
+dallas,Wynnewood,clipped to city,Dallas,1.67,1.67,0,
+dallas,Kiest Park,clipped to city,Dallas,4.47,4.47,0,
+dallas,Cedar Crest,clipped to city,Dallas,2.59,2.59,0,
+dallas,South Oak Cliff,clipped to city,Dallas,2.99,2.99,0,
+dallas,Glen Oaks,clipped to city,Dallas,2.43,2.43,0,
+dallas,Red Bird,clipped to city,Dallas,13.19,13.11,1,
+dallas,Wolf Creek,clipped to city,Dallas,8.0,8.0,0,
+dallas,Mountain Creek,clipped to city,Dallas,10.96,10.95,0,
+dallas,Singing Hills,clipped to city,Dallas,9.13,8.26,10,
+dallas,Highland Hills,clipped to city,Dallas,18.08,17.62,3,
+dallas,Fair Park,clipped to city,Dallas,0.84,0.84,0,
+dallas,South Boulevard-Park Row,clipped to city,Dallas,0.81,0.81,0,
+dallas,Wheatley Place,clipped to city,Dallas,0.89,0.89,0,
+dallas,Queen City,clipped to city,Dallas,1.74,1.74,0,
+dallas,Mill City,clipped to city,Dallas,1.68,1.68,0,
+dallas,Dolphin Heights,clipped to city,Dallas,2.02,2.02,0,
+dallas,Owenwood,clipped to city,Dallas,1.89,1.89,0,
+dallas,Bonton,clipped to city,Dallas,3.09,3.09,0,
+dallas,Joppa,clipped to city,Dallas,6.93,6.62,5,
+dallas,Urbandale-Parkdale,clipped to city,Dallas,3.7,3.7,0,
+dallas,Piedmont,clipped to city,Dallas,4.97,4.97,0,
+dallas,Pleasant Grove,clipped to city,Dallas,15.85,15.32,3,
+dallas,Pemberton Hill,clipped to city,Dallas,4.24,4.24,0,
+dallas,Riverway Estates-Bruton Terrace,clipped to city,Dallas,2.98,2.98,0,
+dallas,Kleberg-Rylie,clipped to city,Dallas,16.74,15.38,8,
+richplano,Canyon Creek,clipped to city,Richardson,5.96,4.53,24,trimmed at city line
+richplano,Prairie Creek,clipped to city,Richardson,1.77,1.77,0,
+richplano,The Reservation,clipped to city,Richardson,5.85,5.85,0,
+richplano,Richardson Heights,clipped to city,Richardson,3.79,3.49,8,
+richplano,Breckinridge,clipped to city,Richardson,3.76,3.01,20,trimmed at city line
+richplano,CityLine,clipped to city,Richardson,3.31,2.81,15,trimmed at city line
+richplano,Cottonwood Heights,clipped to city,Richardson,2.49,2.49,0,
+richplano,Duck Creek,clipped to city,Richardson,2.24,2.24,0,
+richplano,Willow Bend,clipped to city,Plano,4.38,4.27,3,
+richplano,Kings Ridge,clipped to city,Plano,1.05,1.05,0,
+richplano,Normandy Estates,clipped to city,Plano,1.69,1.56,8,
+richplano,Avignon Windhaven,clipped to city,Plano,2.23,2.23,0,
+richplano,Deerfield,clipped to city,Plano,3.76,3.76,0,
+richplano,Preston Meadow,clipped to city,Plano,3.79,3.79,0,
+richplano,Legacy West,clipped to city,Plano,4.5,4.39,2,
+richplano,Whiffletree,clipped to city,Plano,3.51,3.51,0,
+richplano,Hunters Glen,clipped to city,Plano,7.6,7.6,0,
+richplano,Old Town Plano,clipped to city,Plano,7.74,7.74,0,
+richplano,Russell Creek,clipped to city,Plano,5.51,5.51,0,
+richplano,Chase Oaks,clipped to city,Plano,3.0,2.99,0,
+richplano,Ridgeview Ranch,clipped to city,Plano,6.85,6.84,0,
+richplano,Los Rios,clipped to city,Plano,6.32,6.0,5,
+richplano,Plano East,clipped to city,Plano,4.6,4.59,0,
+richplano,Murphy,town limits,Murphy,8.46,5.68,,exact legal town boundary
+frisco,Starwood,clipped to city,Frisco,3.78,3.78,0,
+frisco,Stonebriar,clipped to city,Frisco,2.51,2.51,0,
+frisco,Chapel Creek,clipped to city,Frisco,3.56,3.42,4,
+frisco,The Trails,clipped to city,Frisco,3.18,3.18,0,
+frisco,Plantation Resort,clipped to city,Frisco,10.25,10.25,0,
+frisco,Frisco Square,clipped to city,Frisco,2.49,2.49,0,
+frisco,Shaddock Creek,clipped to city,Frisco,3.34,3.1,7,
+frisco,Lone Star Ranch,clipped to city,Frisco,5.09,5.09,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+frisco,Phillips Creek Ranch,clipped to city,Frisco,6.86,3.77,45,trimmed at city line
+frisco,Newman Village,clipped to city,Frisco,3.29,3.29,0,
+frisco,Richwoods,clipped to city,Frisco,2.83,2.83,0,
+frisco,Hollyhock,clipped to city,Frisco,3.82,3.82,0,
+frisco,Edgestone at Legacy,clipped to city,Frisco,3.21,3.21,0,
+frisco,Fields / PGA Frisco,clipped to city,Frisco,6.87,5.79,16,trimmed at city line
+frisco,Grayhawk,clipped to city,Frisco,6.52,6.52,0,
+frisco,Christie Ranch,clipped to city,Frisco,4.64,4.02,13,
+frisco,Whitley Place,clipped to city,Prosper,3.03,1.6,47,trimmed at city line
+frisco,Downtown Prosper,clipped to city,Prosper,1.63,1.63,0,
+frisco,Star Trail,clipped to city,Prosper,3.9,3.47,11,
+frisco,Windsong Ranch,clipped to city,Prosper,6.26,4.19,33,trimmed at city line
+frisco,Lakes of Prosper,clipped to city,Prosper,3.19,2.84,11,
+frisco,Gentle Creek,clipped to city,Prosper,9.5,7.76,18,trimmed at city line
+frisco,Light Farms,clipped to city,Celina,8.17,4.12,50,trimmed at city line
+frisco,Mustang Lakes,clipped to city,Celina,6.58,3.21,51,trimmed at city line
+frisco,Cambridge Crossing,clipped to city,Celina,4.2,4.2,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+frisco,Downtown Celina,clipped to city,Celina,9.69,5.97,38,trimmed at city line
+frisco,Sutton Fields,clipped to city,Celina,4.45,4.45,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+mckinney,Stonebridge Ranch,clipped to city,McKinney,12.89,11.95,7,
+mckinney,Craig Ranch,clipped to city,McKinney,3.83,3.61,6,
+mckinney,Adriatica,clipped to city,McKinney,3.75,3.75,0,
+mckinney,Tucker Hill,clipped to city,McKinney,11.36,5.36,53,trimmed at city line
+mckinney,Trinity Falls,clipped to city,McKinney,20.36,20.36,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+mckinney,Historic McKinney,clipped to city,McKinney,8.79,8.79,0,
+mckinney,Eldorado,clipped to city,McKinney,6.88,6.88,0,
+mckinney,Auburn Hills,clipped to city,McKinney,7.59,7.04,7,
+mckinney,Kings Lake,clipped to city,McKinney,5.05,5.05,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+mckinney,McKinney East,clipped to city,McKinney,22.95,22.95,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+mckinney,Twin Creeks,clipped to city,Allen,8.53,8.44,1,
+mckinney,Montgomery Farm / Watters Creek,clipped to city,Allen,4.9,4.85,1,
+mckinney,Starcreek,clipped to city,Allen,3.38,2.88,15,
+mckinney,Waterford Parks,clipped to city,Allen,7.34,4.78,35,trimmed at city line
+mckinney,Downtown Allen,clipped to city,Allen,2.05,2.05,0,
+mckinney,Heritage Ranch,clipped to city,Fairview,7.93,5.75,28,trimmed at city line
+mckinney,Lucas,town limits,Lucas,16.6,15.67,,exact legal town boundary
+mckinney,Parker,town limits,Parker,8.36,8.51,,exact legal town boundary
+rockwall,The Harbor,clipped to city,Rockwall,2.96,1.71,42,trimmed at city line
+rockwall,Chandlers Landing,clipped to city,Rockwall,1.28,1.28,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+rockwall,The Shores,clipped to city,Rockwall,6.23,6.23,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+rockwall,Downtown Rockwall,clipped to city,Rockwall,4.02,3.81,5,
+rockwall,Stone Creek,clipped to city,Rockwall,4.47,3.43,23,trimmed at city line
+rockwall,Breezy Hill,clipped to city,Rockwall,6.52,4.93,24,trimmed at city line
+rockwall,Saddlebrook,clipped to city,Rockwall,3.61,3.59,1,
+rockwall,Hickory Hills,clipped to city,Rockwall,3.46,3.24,6,
+rockwall,Heath Golf & Yacht Club,clipped to city,Heath,3.42,2.73,20,trimmed at city line
+rockwall,Buffalo Creek,clipped to city,Heath,3.42,3.38,1,
+rockwall,Sonoma Verde,clipped to city,McLendon-Chisholm,16.88,8.69,49,trimmed at city line
+rockwall,Woodcreek,clipped to city,Fate,3.61,3.21,11,
+rockwall,Chamberlain Crossing,clipped to city,Fate,10.05,10.05,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+rockwall,Sapphire Bay,clipped to city,Rowlett,1.72,1.72,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+rockwall,Dalrock lakefront,clipped to city,Rowlett,3.12,2.41,23,trimmed at city line
+rockwall,Waterview,clipped to city,Rowlett,5.11,3.05,40,trimmed at city line
+rockwall,Lakeview Pointe,clipped to city,Rowlett,6.63,6.63,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+rockwall,Downtown Rowlett,clipped to city,Rowlett,3.41,3.0,12,
+rockwall,Downtown Sachse,clipped to city,Sachse,3.99,3.55,11,
+rockwall,Woodbridge,clipped to city,Sachse,10.55,4.29,59,trimmed at city line
+rockwall,Stoney Creek,clipped to city,Sunnyvale,4.74,4.12,13,
+rockwall,Long Creek,clipped to city,Sunnyvale,4.9,2.8,43,trimmed at city line
+rockwall,Firewheel,clipped to city,Garland,8.25,7.76,6,
+rockwall,Firewheel Town Center,clipped to city,Garland,1.37,1.37,0,
+rockwall,East Garland / Duck Creek,clipped to city,Garland,13.22,11.72,11,
+rockwall,Inspiration,unchanged,,11.73,11.73,0,spans several towns / no city polygon
+rockwall,Bozman Farm,clipped to city,Wylie,8.41,8.41,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+rockwall,Downtown Wylie,clipped to city,Wylie,3.49,3.47,1,
+rockwall,Wylie lakeside,clipped to city,Wylie,2.97,2.34,21,trimmed at city line
+southlake,Timarron,clipped to city,Southlake,1.17,1.14,3,
+southlake,Town Square,clipped to city,Southlake,1.18,1.18,0,
+southlake,Carillon,clipped to city,Southlake,1.46,1.42,3,
+southlake,Estes Park,clipped to city,Southlake,1.56,1.56,0,
+southlake,Clariden Ranch,clipped to city,Southlake,1.79,1.7,5,
+southlake,Shady Oaks,clipped to city,Southlake,4.24,4.03,5,
+southlake,Monticello,clipped to city,Southlake,1.53,1.41,8,
+southlake,Southridge Lakes,clipped to city,Southlake,1.32,1.32,0,
+southlake,Coventry Manor,clipped to city,Southlake,1.87,1.72,8,
+southlake,Bob Jones / North Southlake,clipped to city,Southlake,2.33,1.81,22,trimmed at city line
+southlake,Kimball / East Southlake,clipped to city,Southlake,1.11,1.11,0,
+westlake-colleyville,Vaquero,clipped to city,Westlake,2.34,2.04,13,
+westlake-colleyville,Glenwyck Farms,clipped to city,Westlake,5.29,5.29,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+westlake-colleyville,Entrada,clipped to city,Westlake,1.59,1.59,0,MIS-DRAWN or ANNEXED SINCE: mostly outside its city polygon -- left unclipped; check on the map
+westlake-colleyville,Trophy Club,town limits,Trophy Club,6.21,3.97,,exact legal town boundary
+westlake-colleyville,Roanoke,town limits,Roanoke,8.41,6.67,,exact legal town boundary
+westlake-colleyville,Colleyville Town Center,clipped to city,Colleyville,2.03,2.03,0,
+westlake-colleyville,Ross Downs,clipped to city,Colleyville,2.68,2.65,1,
+westlake-colleyville,Whittier Heights,clipped to city,Colleyville,3.92,3.92,0,
+westlake-colleyville,Pool Road Estates,clipped to city,Colleyville,2.21,2.18,1,
+westlake-colleyville,Montclair Parc,clipped to city,Colleyville,1.6,1.45,9,
+corridor,Las Colinas,clipped to city,Irving,3.22,3.18,1,
+corridor,Hackberry Creek,clipped to city,Irving,0.95,0.95,0,
+corridor,Cottonwood Valley,clipped to city,Irving,0.99,0.99,0,
+corridor,Old Town Coppell,clipped to city,Coppell,1.21,1.05,13,
+corridor,Riverchase,clipped to city,Coppell,1.6,1.6,0,
+corridor,Panther Creek,clipped to city,Coppell,1.42,1.41,0,
+corridor,Historic Downtown Grapevine,clipped to city,Grapevine,1.34,1.34,0,
+corridor,Hidden Creek,clipped to city,Grapevine,1.58,1.55,2,
+corridor,Silver Lake Estates,clipped to city,Grapevine,1.07,1.07,0,
+corridor,Flower Mound,town limits,Flower Mound,2.95,44.4,,exact legal town boundary
+corridor,Canyon Falls,unchanged,,1.86,1.86,0,spans several towns / no city polygon
+corridor,Highland Village,town limits,Highland Village,2.68,6.51,,exact legal town boundary
+corridor,Double Oak,town limits,Double Oak,2.19,2.47,,exact legal town boundary
+corridor,Bartonville,town limits,Bartonville,2.67,6.53,,exact legal town boundary
+corridor,Argyle,town limits,Argyle,3.17,11.46,,exact legal town boundary
+corridor,Northlake / Justin,town limits,Northlake|Justin,3.47,19.34,,exact legal town boundary
+corridor,Copper Canyon,town limits,Copper Canyon,1.74,4.53,,exact legal town boundary
+rockwall,Sunnyvale acreage,town remainder,Sunnyvale,,9.81,,town limits minus its named neighborhoods
+rockwall,Heath acreage,town remainder,Heath,,6.07,,town limits minus its named neighborhoods
+mckinney,Fairview acreage,town remainder,Fairview,,3.14,,town limits minus its named neighborhoods
+frisco,Celina acreage,town remainder,Celina,,13.46,,town limits minus its named neighborhoods

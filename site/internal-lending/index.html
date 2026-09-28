@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Lending signals — internal</title>
+<script>
+// Turnstile callbacks are defined here, BEFORE the widget script is requested, so the widget can never render
+// (and look up its data-callback) ahead of them, whatever order the browser finishes loading things in.
+window.__turnstileToken = null;
+window.onTurnstileOk = (token)=>{ window.__turnstileToken = token; const b=document.getElementById('gateSubmit'); if(b){ b.disabled=false; b.textContent='Register & view'; } };
+window.onTurnstileErr = ()=>{ window.__turnstileToken = null; const b=document.getElementById('gateSubmit'); if(b){ b.disabled=true; b.textContent='Captcha failed to load — refresh the page'; } };
+</script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<style>
+  :root{ --bg:#F4F1EA; --panel:#FFFFFF; --line:#E4DFD3; --ink:#241F19; --dim:#6B6459; --accent:#B0473A; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+  header{padding:20px 24px 8px}
+  h1{font-size:20px;margin:0 0 4px}
+  .warn{background:#FBECEA;border:1px solid #E7C6C1;color:#7A2E24;border-radius:8px;padding:8px 12px;font-size:13px;margin:0 24px 16px;max-width:900px}
+  main{padding:0 24px 60px;max-width:900px}
+  table{border-collapse:collapse;width:100%;margin:12px 0 28px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:8px 12px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  thead th{background:#EFEAE0;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--dim)}
+  tbody tr:last-child td{border-bottom:none}
+  .bars{margin:8px 0 28px}
+  .bar-row{display:flex;align-items:center;gap:10px;margin:6px 0}
+  .bar-label{width:90px;font-size:13px;flex:none}
+  .bar-track{flex:1;background:#EFEAE0;border-radius:5px;height:18px;position:relative}
+  .bar-fill{background:var(--accent);height:100%;border-radius:5px}
+  .bar-val{width:110px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums;flex:none}
+  .note{color:var(--dim);font-size:12.5px;margin:4px 0 24px;max-width:760px}
+  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:20;overflow:auto;padding:24px 0}
+  .gate form{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:28px;width:min(380px,90vw);text-align:center}
+  .gate input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px;margin:8px 0;text-align:left}
+  .gate label{display:block;text-align:left;font-size:12px;color:var(--dim);margin:10px 0 0}
+  .gate .cf-turnstile{margin:14px 0;display:flex;justify-content:center}
+  .gate button{width:100%;padding:10px;border:0;border-radius:8px;background:var(--ink);color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:6px}
+  .gate button:disabled{opacity:.5;cursor:default}
+  .gate .err{color:var(--accent);font-size:13px;min-height:18px;margin-top:8px}
+  .gate .fineprint{color:var(--dim);font-size:11.5px;margin-top:12px;line-height:1.4}
+  .pending{color:var(--dim)}
+  section h2{font-size:15px;margin:24px 0 4px}
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+  <form id="gateForm">
+    <div style="font-weight:800;font-size:16px;margin-bottom:2px">Internal — lending signals</div>
+    <div style="color:var(--dim);font-size:13px">Not part of the public site. Register to view.</div>
+    <label for="regName">Name</label>
+    <input id="regName" autocomplete="name" required>
+    <label for="regEmail">Email</label>
+    <input id="regEmail" type="email" autocomplete="email" required>
+    <label for="regMobile">Mobile</label>
+    <input id="regMobile" type="tel" autocomplete="tel" required>
+    <div class="cf-turnstile" data-sitekey="%%TURNSTILE_SITE_KEY%%" data-callback="onTurnstileOk" data-error-callback="onTurnstileErr"></div>
+    <button type="submit" id="gateSubmit" disabled>Solve the check above to continue</button>
+    <div class="err" id="gateErr"></div>
+    <div class="fineprint">Your name, email and mobile are sent to Michael so he knows who's viewing this page — nothing else is stored or shared.</div>
+  </form>
+</div>
+
+<header>
+  <h1>DFW lending signals — internal</h1>
+  <div style="color:var(--dim);font-size:13px">Aggregate HMDA lending activity for the 5 atlas counties. For Michael's own deal-sourcing use — not the public map.</div>
+</header>
+<div class="warn">
+  <b>Internal use only.</b> Not linked from the public map, not search-indexed. This page shows only aggregate
+  loan counts and dollar volume by county and loan type — the same figures anyone can pull from the CFPB's own
+  public HMDA data browser. It never requests or displays race, ethnicity, sex, or any other applicant-level
+  or lender-identifying detail.
+</div>
+<main>
+  <section id="content"><p class="pending">Loading…</p></section>
+</main>
+
+<script>
+// --- registration gate --------------------------------------------------
+// Fill in these two after following internal-lending/README.md's setup steps:
+const REGISTER_URL = '%%WORKER_URL%%';        // e.g. https://il-register.YOURSUBDOMAIN.workers.dev
+// (the Turnstile site key is set as data-sitekey on the .cf-turnstile div above, not here)
+//
+// How this differs from the old passphrase: a real name/email/mobile is required, a live captcha has
+// to be solved (not just a password anyone could share), and Michael gets an email every time someone
+// gets in. It's a genuinely stronger gate than a shared password.
+//
+// It is still not the same as a real login system: this page's files are still just static files on
+// GitHub Pages, so someone who already has the exact link (or the data file's URL) can still fetch it
+// directly without ever hitting this form -- registering only stops a casual visitor who lands on the
+// page itself. If that gap matters (the link starts circulating, or this needs to hold something more
+// sensitive), the fix is moving access-checking in front of GitHub Pages itself (e.g. Cloudflare
+// Access) rather than inside the page -- ask and we'll set that up.
+const gate = document.getElementById('gate');
+if(localStorage.getItem('il_ok')==='1') gate.style.display='none';
+
+const submitBtn = document.getElementById('gateSubmit');
+// (the Turnstile callbacks themselves live in the <head>, ahead of the widget script -- see there)
+
+document.getElementById('gateForm').onsubmit = async (e)=>{
+  const turnstileToken = window.__turnstileToken;
+  e.preventDefault();
+  const errEl = document.getElementById('gateErr');
+  errEl.textContent = '';
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const mobile = document.getElementById('regMobile').value.trim();
+  if(!name || !email || !mobile){ errEl.textContent = 'All three fields are required.'; return; }
+  if(!turnstileToken){ errEl.textContent = 'Please complete the captcha above.'; return; }
+  if(!REGISTER_URL || REGISTER_URL.startsWith('%%')){ errEl.textContent = 'Registration isn’t wired up yet (REGISTER_URL is unset) — see internal-lending/README.md.'; return; }
+  submitBtn.disabled = true; submitBtn.textContent = 'Checking…';
+  try{
+    const r = await fetch(REGISTER_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, email, mobile, token: turnstileToken}) });
+    const d = await r.json();
+    if(d.ok){ localStorage.setItem('il_ok','1'); gate.style.display='none'; }
+    else { errEl.textContent = d.error || 'Something went wrong — please try again.'; submitBtn.disabled = true; submitBtn.textContent = 'Solve the check above to continue'; if(window.turnstile) turnstile.reset(); window.__turnstileToken = null; }
+  }catch(e){
+    errEl.textContent = 'Could not reach the registration service — try again in a moment.';
+    submitBtn.disabled = false; submitBtn.textContent = 'Register & view';
+  }
+};
+
+// --- data ---------------------------------------------------------------
+const fmt$ = v => v==null?'—':'$'+Math.round(v).toLocaleString();
+const fmtN = v => v==null?'—':Math.round(v).toLocaleString();
+const ORDER = ['48113','48085','48121','48439','48397'];
+
+fetch('data/hmda_stats.json').then(r=>r.ok?r.json():null).then(d=>{
+  const el = document.getElementById('content');
+  if(!d || !d.counties || !Object.keys(d.counties).length){
+    el.innerHTML = `<p class="note">No data yet — run the "Refresh housing + schools + lot + lending data" GitHub Action, or it hasn't completed its first run.</p>`;
+    return;
+  }
+  const rows = ORDER.map(f=>d.counties[f]).filter(Boolean);
+  const purposeRows = rows.map(c=>`<tr><td>${c.name}</td>
+      <td>${fmtN(c['Home purchase']?.count)}</td><td>${fmt$(c['Home purchase']?.sum)}</td>
+      <td>${fmtN(c['Refinance']?.count)}</td><td>${fmt$(c['Refinance']?.sum)}</td>
+      <td>${fmtN(c['Cash-out refinance']?.count)}</td><td>${fmt$(c['Cash-out refinance']?.sum)}</td></tr>`).join('');
+  const constructionRows = rows.map(c=>{
+    const sb = c['Site-built']?.count||0, mh = c['Manufactured home']?.count||0, tot = sb+mh;
+    return `<tr><td>${c.name}</td><td>${fmtN(sb)}</td><td>${fmtN(mh)}</td><td>${tot?((mh/tot)*100).toFixed(1)+'%':'—'}</td></tr>`;
+  }).join('');
+  const maxPurchase = Math.max(...rows.map(c=>c['Home purchase']?.sum||0));
+  const bars = rows.map(c=>{
+    const v = c['Home purchase']?.sum||0; const pct = maxPurchase? (v/maxPurchase*100):0;
+    return `<div class="bar-row"><div class="bar-label">${c.name}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div><div class="bar-val">${fmt$(v)}</div></div>`;
+  }).join('');
+  el.innerHTML = `
+    <p class="note">HMDA year ${d.year||'—'} · data pulled ${d.asof||'—'} · source: ${d.source||''}</p>
+    <section>
+      <h2>Originated home-purchase $ volume by county</h2>
+      <div class="bars">${bars}</div>
+    </section>
+    <section>
+      <h2>Originated loans by purpose</h2>
+      <table><thead><tr><th>County</th><th>Purchase #</th><th>Purchase $</th><th>Refi #</th><th>Refi $</th><th>Cash-out #</th><th>Cash-out $</th></tr></thead>
+      <tbody>${purposeRows}</tbody></table>
+    </section>
+    <section>
+      <h2>Site-built vs. manufactured (all originated loans)</h2>
+      <table><thead><tr><th>County</th><th>Site-built #</th><th>Manufactured #</th><th>% manufactured</th></tr></thead>
+      <tbody>${constructionRows}</tbody></table>
+      <p class="note">"Manufactured home" is HMDA's construction-method field — not the same as a new-construction
+        loan; HMDA doesn't carry a distinct new-construction category, so this can't yet show teardown/rebuild
+        or spec-build activity specifically. Per-lender detail (who's originating this volume) isn't built yet
+        either — it needs an extra lookup step to turn each loan's lender ID into a name.</p>
+    </section>`;
+}).catch(()=>{ document.getElementById('content').innerHTML = '<p class="note">Could not load data/hmda_stats.json.</p>'; });
+</script>
+</body>
+</html>

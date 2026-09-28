@@ -1,4 +1,4 @@
-name: Refresh housing + schools data
+name: Refresh housing + schools + lot + lending data
 on:
   schedule:
     - cron: "17 9 3 * *"      # 3rd of each month, 09:17 UTC (Zillow posts mid-month; this catches the prior release)
@@ -12,16 +12,35 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
+      # Each data step is independent: if one source is down for the day (Zillow's CSV host, the CFPB API) the
+      # others still refresh and get committed. (Lot statistics moved to the "Refresh parcel data" workflow in
+      # v15 -- they're computed from the downloaded parcel file there, not queried live here any more.) The last step then fails the run if
+      # any step failed, so it still shows red and still sends the failure email -- it just no longer throws
+      # away the steps that worked.
       - name: Build housing.json
+        id: housing
+        continue-on-error: true
         env:
           CENSUS_KEY: ${{ secrets.CENSUS_KEY }}
         run: python scripts/refresh_housing.py --census-key "$CENSUS_KEY"
       - name: Build schools.json
+        id: schools
+        continue-on-error: true
         run: python scripts/refresh_schools.py --ratings data-sources/tea_ratings.csv --private data-sources/pss.csv
+      - name: Build internal lending-signals data (not part of the public map)
+        id: hmda
+        continue-on-error: true
+        run: python scripts/build_hmda.py
       - name: Commit if changed
         run: |
           git config user.name "atlas-bot"
           git config user.email "atlas-bot@users.noreply.github.com"
-          git add data/housing.json data/schools.json
-          git diff --cached --quiet || git commit -m "Refresh housing + schools data $(date -u +%F)"
+          git add data/housing.json data/schools.json internal-lending/data/hmda_stats.json 2>/dev/null || true
+          git diff --cached --quiet || git commit -m "Refresh housing + schools + lot + lending data $(date -u +%F)"
           git push
+      - name: Flag any failed data step
+        if: steps.housing.outcome == 'failure' || steps.schools.outcome == 'failure' || steps.hmda.outcome == 'failure'
+        run: |
+          echo "One or more data steps failed (see above). Whatever succeeded was still committed."
+          echo "housing=${{ steps.housing.outcome }} schools=${{ steps.schools.outcome }} hmda=${{ steps.hmda.outcome }}"
+          exit 1

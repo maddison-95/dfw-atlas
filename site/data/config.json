@@ -1,0 +1,5 @@
+{
+  "_comment": "Site keys the page reads on load. Edit on GitHub; no rebuild needed. esri_api_key: an ArcGIS Location Platform API key with the Basemaps privilege, restricted to your site's domain -- enables the 'Aerial view' toggle (README section 6). Leave empty to hide imagery. parcels_pmtiles_url: normally EMPTY -- the page finds the parcel tiles at its own data/parcels.pmtiles, which the 'Deploy site' workflow publishes (README section 7). Fill this in only if the tile file is hosted somewhere else (e.g. a Cloudflare R2 bucket because it outgrew GitHub Pages' 1 GB cap); that host must allow byte-range reads and send Access-Control-Allow-Origin.",
+  "esri_api_key": "",
+  "parcels_pmtiles_url": ""
+}

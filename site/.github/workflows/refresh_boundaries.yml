@@ -1,0 +1,73 @@
+name: Rebuild neighborhood boundaries (lot-exact)
+# Rebuilds every neighborhood shape from real data -- exact town limits (Census TIGER 2024), then every
+# neighborhood snapped to the platted subdivisions whose lots fall inside it (from the same TxGIO parcel
+# files scripts/build_parcels.py downloads), with otherwise-uncovered streets added as their own
+# plat-named units so no house is left outside a neighborhood. Zip outlines are replaced with real Census
+# ZCTA shapes and each neighborhood's zip list is re-derived from what it actually overlaps.
+#
+# It opens a PULL REQUEST instead of pushing to main: the result rewrites ~250 shapes, so it gets looked at
+# (data/boundary_report.md in the PR lists exactly what to look at) before it goes live. Merge the PR and
+# GitHub Pages redeploys. Needs the repo setting Settings -> Actions -> General -> "Allow GitHub Actions to
+# create and approve pull requests" ticked once; if it isn't, the branch is still pushed and the log prints
+# the link to open the PR by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: print the parcel feed's sample plat names per neighborhood, change nothing"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 9 12 2 *"    # once a year (Feb 12) -- plats and town limits move slowly; run by hand any time
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: |
+          pip install shapely pyshp
+          sudo apt-get update -qq && sudo apt-get install -y -qq gdal-bin
+
+      - name: Download parcel data (five counties, ~1 GB from TxGIO's bulk files -- same script as the parcels workflow)
+        run: python scripts/build_parcels.py --out /tmp/parcels.ndjson --work "$RUNNER_TEMP"
+
+      - name: Stage 1 -- exact town limits, clip, de-overlap
+        run: python scripts/build_boundaries.py --stage municipal
+
+      - name: Dry run -- plat names the feed gives per neighborhood
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          python scripts/build_boundaries.py --stage plats --parcels /tmp/parcels.ndjson --dry-run
+          git checkout -- data/   # a dry run changes nothing
+
+      - name: Stage 2 -- snap every neighborhood to lot lines, fill gaps from plats, real zip outlines
+        if: ${{ inputs.dry_run != true }}
+        run: python scripts/build_boundaries.py --stage plats --parcels /tmp/parcels.ndjson
+
+      - name: Rebuild index.html (it embeds areas_meta.json at build time)
+        if: ${{ inputs.dry_run != true }}
+        run: python assemble3.py
+
+      - name: Open a pull request with the result
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "atlas-bot"
+          git config user.email "atlas-bot@users.noreply.github.com"
+          BR="boundaries-$(date -u +%Y%m%d)"
+          git checkout -b "$BR"
+          git add data/geo.json data/areas_meta.json data/atlas.json data/boundary_report.md data/boundary_report.csv index.html test_index.html 2>/dev/null || true
+          git diff --cached --quiet && { echo "nothing changed"; exit 0; }
+          git commit -m "Rebuild neighborhood boundaries from town limits + plat records ($(date -u +%F))"
+          git push -f origin "$BR"
+          head -c 60000 data/boundary_report.md > /tmp/pr_body.md
+          gh pr create --base main --head "$BR" \
+            --title "Lot-exact neighborhood boundaries ($(date -u +%F))" \
+            --body-file /tmp/pr_body.md \
+            || echo "Could not open the PR automatically (see the note at the top of this workflow file). Open it here: https://github.com/${GITHUB_REPOSITORY}/compare/main...$BR?expand=1"
