@@ -17,6 +17,10 @@ data/lot_stats.json      median lot size/value/home age per neighborhood — wri
                           inside the "Refresh parcel data" Action (from the downloaded parcel file)
 data/parcels_source.json which TxGIO parcel release the tiles and lot stats were built from, and when —
                           written by the "Refresh parcel data" Action; the lot popup quotes it
+data/archive/<YYYY-MM>/  dated copies of every accepted data file (housing, schools, lot stats, lending), kept 36
+                          months — written by scripts/keep_last_good.py; roll back by copying one over the live file
+scripts/keep_last_good.py the guard that runs before every data commit: rejects a broken or half-empty file (keeps
+                          the last good one) and archives what it accepts
 data/parcels.pmtiles     NOT in the repo: the parcel tiles (hundreds of MB) live on the repo's "parcels-data"
                           release and are copied into the published site by the "Deploy site" Action
 data/config.json         site keys read on load (Esri key for aerial imagery; optional parcel-tiles URL if the
@@ -67,6 +71,11 @@ robots.txt               tells search engines to skip internal-lending/
   the popup footer quotes it, so a Realtor can see how current the numbers are.
 * Hosting note: GitHub *release* downloads do not send CORS headers (verified), so the v13 plan of reading
   tiles from a release URL would have been blocked by the browser. Publishing them with the site avoids that.
+* **Older data is kept and used as a fallback, at every level** (section 9): a county whose newest TxGIO file
+  won't download or convert is built from that county's file in the previous TxGIO release (they keep every
+  year online); the previous tile build is kept as a second release and the deploy uses it if the current one
+  is missing; and the monthly files (housing, schools, lending, lot stats) go through a keep-last-good guard
+  that refuses a broken or half-empty file and archives every accepted version under `data/archive/<month>/`.
 
 ## What's new in v14
 
@@ -425,6 +434,24 @@ a few percent of lots per county come through without one — those join the nea
 street's width or two, otherwise they stay with the town shape. Condo and commercial parcels are lots too, so
 downtown-type neighborhoods snap to their building footprints. Gaps that remain after the rebuild are real:
 parks, lakes, rail yards, unplatted land — listed per city in the report.
+
+## 9. Fallbacks and rollback — what happens when a source won't pull
+
+Every data source here is somebody else's server, and each one has been down at least once. The rule
+throughout is *never replace good data with nothing*:
+
+| Layer | If the new pull fails… | Kept where | Roll back by hand |
+| --- | --- | --- | --- |
+| Parcel tiles, one county | That county is built from the **previous TxGIO release** (they keep every year online; up to 3 releases back). `data/parcels_source.json` lists which counties fell back, the popup footer says so, and the next quarterly run retries the newest release. | TxGIO DataHub | — |
+| Parcel tiles, whole build | Nothing is published (a partial build exits non-zero), so the live site keeps the current tiles. The build before that is kept as the `parcels-data-previous` release; the deploy uses it automatically if `parcels-data` is ever missing. | Repo Releases | Releases page → delete `parcels-data`, rename `parcels-data-previous` to `parcels-data` (edit → tag), run "Deploy site" |
+| Lot statistics | `keep_last_good.py` rejects the new `lot_stats.json` if it's invalid or lost >40% of its records; the committed version stays. | `data/archive/<month>/` | Copy the archived file over `data/lot_stats.json`, commit |
+| Housing, schools, lending | Same guard, same archive, in the monthly refresh. A failed *script* never touches the file at all (each step is independent). | `data/archive/<month>/` | Same |
+| Neighborhood boundaries | The rebuild opens a **pull request**; nothing changes until you merge it. | Git history | Revert the merge commit |
+| Basemap / aerial | Not ours to cache (OpenFreeMap and Esri terms); the page keeps working with the last-loaded tiles. | — | — |
+
+Archives are pruned after 36 months; `data/archive/index.json` lists what's there. Nothing in this section
+needs a decision from you — it's how the workflows behave by default. When the log shows a `::warning::` line,
+that's the moment something fell back; the site is still fine, the warning says what to look at.
 
 ## Attribution shown on the page
 Basemap © OpenStreetMap contributors, served by OpenFreeMap. Zip areas: U.S. Census ZCTA. Home values and rents:

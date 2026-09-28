@@ -85,16 +85,21 @@ def api_get(path, params=None):
     raise RuntimeError(f'DataHub API failed after {RETRIES} tries: {last}\n  {url}')
 
 
-def newest_collection():
-    """The newest 'Land Parcels' collection on TxGIO's DataHub (one is published per year)."""
+def land_parcel_collections():
+    """Every 'Land Parcels' collection on TxGIO's DataHub, newest first. TxGIO publishes one per year and keeps
+    the older ones online, which is what makes the per-county fallback below possible."""
     r = api_get('/collections/', {'search': COLLECTION_NAME, 'limit': 50})
     rows = [c for c in r.get('results', []) if str(c.get('name', '')).strip().lower() == COLLECTION_NAME.lower()]
     if not rows:
         raise RuntimeError(f'no collection named {COLLECTION_NAME!r} on the DataHub API: {json.dumps(r)[:400]}')
     rows.sort(key=lambda c: (str(c.get('acquisition_date') or ''), str(c.get('publication_date') or '')), reverse=True)
-    c = rows[0]
-    return {'collection_id': c['collection_id'], 'name': c.get('name'), 'acquisition_date': c.get('acquisition_date'),
-            'publication_date': c.get('publication_date'), 'license': c.get('license_name'), 'source': c.get('source_name')}
+    return [{'collection_id': c['collection_id'], 'name': c.get('name'), 'acquisition_date': c.get('acquisition_date'),
+             'publication_date': c.get('publication_date'), 'license': c.get('license_name'), 'source': c.get('source_name')}
+            for c in rows]
+
+
+def newest_collection():
+    return land_parcel_collections()[0]
 
 
 def county_resource(collection_id, county):
@@ -136,6 +141,8 @@ def download(url, dest):
             return dest
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last = e
+            if isinstance(e, urllib.error.HTTPError) and e.code in (403, 404, 410):
+                break   # the file isn't there; retrying won't change that (the caller may try an older release)
             time.sleep(3 * (attempt + 1))
     raise RuntimeError(f'download failed after {RETRIES} tries: {last}\n  {url}')
 
@@ -268,6 +275,7 @@ def main():
                     help='path of the --meta file from the last successful run; if TxGIO has not published a newer release since, '
                          'print a notice, set skip=true in $GITHUB_OUTPUT and exit 0 without downloading anything')
     ap.add_argument('--force', action='store_true', help='rebuild even if --skip-if-current says nothing changed')
+    ap.add_argument('--fallback-depth', type=int, default=3, help='if a county fails in the newest release, try up to this many older releases for that county (0 = never)')
     args = ap.parse_args()
 
     global API
@@ -282,17 +290,21 @@ def main():
         if not shutil.which(tool): sys.exit(f'{tool} not found -- install GDAL (apt-get install gdal-bin)')
 
     meta = {'built': time.strftime('%Y-%m-%d'), 'counties': {}}
-    coll = None
+    coll = None; colls = []
     need_api = any(c not in local for c in counties)
     if need_api:
-        coll = newest_collection()
+        colls = land_parcel_collections(); coll = colls[0]
+        if len(colls) > 1:
+            log('Older releases available as per-county fallback: ' + ', '.join(str(c['acquisition_date'])[:7] for c in colls[1:]))
         meta.update({k: coll[k] for k in ('collection_id', 'acquisition_date', 'publication_date', 'license', 'source')})
         log(f'Newest TxGIO {coll["name"]} release: acquired {coll["acquisition_date"]}, published {coll["publication_date"]}, '
             f'license {coll["license"]}, collection {coll["collection_id"]}')
         if args.skip_if_current and not args.force and not args.dry_run and os.path.exists(args.skip_if_current):
             try: prev = json.load(open(args.skip_if_current))
             except Exception: prev = {}
-            if prev.get('collection_id') == coll['collection_id'] and prev.get('total'):
+            if prev.get('collection_id') == coll['collection_id'] and prev.get('total') and not prev.get('fallbacks'):
+                # (a build that had to fall back to an older release for some county is NOT 'current': it is
+                # redone each run until every county comes from the newest release)
                 log(f'Already built from this release on {prev.get("built")} ({prev.get("total"):,} parcels) -- nothing new '
                     f'from TxGIO, so nothing to download. Use --force (or the workflow\'s "force" box) to rebuild anyway.')
                 if os.environ.get('GITHUB_OUTPUT'):
@@ -323,32 +335,64 @@ def main():
         if not args.keep: shutil.rmtree(work, ignore_errors=True)
         return
 
-    grand = 0; all_years = {}
+    def one_attempt(c, work, zp_or_none, release):
+        """Download (unless a zip is given), unpack and convert one county from one release into a
+        per-county temp file. Returns (rows, mapping report, temp path). Raises on any failure -- the temp
+        file is then discarded, so a half-converted county can never leak into the output."""
+        if zp_or_none is None:
+            res = county_resource(release['collection_id'], c)
+            log(f'{c}: downloading {res["url"]} ({(res["bytes"] or 0)/1e6:,.0f} MB)')
+            zp = download(res['url'], os.path.join(work, f'src_{release["collection_id"][:8]}.zip'))
+        else:
+            zp = zp_or_none
+        src = unpack(zp, os.path.join(work, 'x_' + release['collection_id'][:8] if release else 'x_local'))
+        tmp = os.path.join(work, 'county.ndjson')
+        with open(tmp, 'w') as tfh:
+            n, rep = convert(src, c, tfh)
+        if n == 0:
+            raise RuntimeError('converted 0 parcels')
+        return n, rep, tmp
+
+    grand = 0; all_years = {}; meta['county_source'] = {}; meta['fallbacks'] = []
     with open(args.out, 'w') as fh:
         for c in counties:
             t0 = time.time()
-            try:
-                work = os.path.join(args.work, f'parcels_{c.lower()}'); os.makedirs(work, exist_ok=True)
-                if c in local:
-                    zp = local[c]; log(f'{c}: using local zip {zp}')
-                else:
-                    res = county_resource(coll['collection_id'], c)
-                    log(f'{c}: downloading {res["url"]} ({(res["bytes"] or 0)/1e6:,.0f} MB)')
-                    zp = download(res['url'], os.path.join(work, 'src.zip'))
-                src = unpack(zp, os.path.join(work, 'x'))
-                n, rep = convert(src, c, fh)
-                report_mapping(c, rep)
-                log(f'{c}: wrote {n:,} parcels in {time.time()-t0:,.0f}s')
-                meta['counties'][c.title()] = n
-                for y, k in rep['years'].items(): all_years[y] = all_years.get(y, 0) + k
-                grand += n
-            except Exception as e:
-                log(f'{c}: FAILED -- {e} -- continuing with the remaining counties')
+            work = os.path.join(args.work, f'parcels_{c.lower()}'); os.makedirs(work, exist_ok=True)
+            # newest release first; then, if that county's file is missing, won't download, or won't convert,
+            # the same county from progressively older releases (TxGIO keeps them all online). A year-old roll
+            # for one county beats a hole in the map for that county.
+            attempts = [(local[c], None)] if c in local else [(None, r) for r in colls[:1 + max(0, args.fallback_depth)]]
+            done = False
+            for zp, release in attempts:
+                try:
+                    if zp is None and release is not coll:
+                        log(f'{c}: trying the older {str(release["acquisition_date"])[:7]} release instead')
+                    elif zp is not None:
+                        log(f'{c}: using local zip {zp}')
+                    n, rep, tmp = one_attempt(c, work, zp, release or coll)
+                    with open(tmp) as tfh: shutil.copyfileobj(tfh, fh)
+                    report_mapping(c, rep)
+                    src_desc = {'collection_id': (release or coll or {}).get('collection_id'), 'acquisition_date': (release or coll or {}).get('acquisition_date'),
+                                'publication_date': (release or coll or {}).get('publication_date')} if release or coll else {'local': True}
+                    if release is not None and release is not coll:
+                        src_desc['fallback'] = True; meta['fallbacks'].append(c.title())
+                        log(f'::warning::{c}: built from the older {str(release["acquisition_date"])[:7]} TxGIO release (newest failed)')
+                    meta['county_source'][c.title()] = src_desc
+                    log(f'{c}: wrote {n:,} parcels in {time.time()-t0:,.0f}s')
+                    meta['counties'][c.title()] = n
+                    for y, k in rep['years'].items(): all_years[y] = all_years.get(y, 0) + k
+                    grand += n; done = True
+                    break
+                except Exception as e:
+                    log(f'{c}: FAILED ({str(release["acquisition_date"])[:7] if release else "local"}) -- {e}')
+            if not done:
+                log(f'{c}: FAILED in every release tried -- continuing with the remaining counties')
                 meta['counties'][c.title()] = 0
-            finally:
-                if not args.keep: shutil.rmtree(work, ignore_errors=True)
+            if not args.keep: shutil.rmtree(work, ignore_errors=True)
     meta['total'] = grand
-    if all_years: meta['tax_year'] = max(all_years, key=all_years.get)   # the roll year most parcels carry
+    if all_years:
+        meta['tax_year'] = max(all_years, key=all_years.get)   # the roll year most parcels carry
+        meta['tax_year_min'], meta['tax_year_max'] = min(all_years), max(all_years)
     log(f'\nTOTAL parcels written: {grand:,} -> {args.out}')
     if args.meta:
         with open(args.meta, 'w') as fh: json.dump(meta, fh, indent=1)

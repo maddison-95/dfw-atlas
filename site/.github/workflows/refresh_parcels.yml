@@ -93,22 +93,33 @@ jobs:
         if: ${{ inputs.dry_run != true && steps.pull.outputs.skip != 'true' }}
         run: python scripts/refresh_lots.py --parcels "$RUNNER_TEMP/parcels.ndjson" --meta data/parcels_source.json
 
+      - name: Keep the last good lot statistics if the new file is broken or half-empty; archive what's accepted
+        if: ${{ inputs.dry_run != true && steps.pull.outputs.skip != 'true' }}
+        run: python scripts/keep_last_good.py data/lot_stats.json
+
       - name: Store the tile file on the parcels-data release (the deploy workflow reads it from there)
         if: ${{ inputs.dry_run != true && steps.pull.outputs.skip != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete parcels-data --yes --cleanup-tag 2>/dev/null || true
+          # keep the previous build as parcels-data-previous: the deploy falls back to it if this one is ever
+          # missing, and it can be restored by hand (README section 7) if a new build turns out wrong
+          if gh release view parcels-data >/dev/null 2>&1; then
+            gh release delete parcels-data-previous --yes --cleanup-tag 2>/dev/null || true
+            gh release edit parcels-data --tag parcels-data-previous --title "Parcel tiles (previous build)" \
+              --notes "The build before the current one, kept as a fallback. $(gh release view parcels-data --json body --jq .body 2>/dev/null | head -c 600)" >/dev/null \
+              || gh release delete parcels-data --yes --cleanup-tag 2>/dev/null || true
+          fi
           gh release create parcels-data "$RUNNER_TEMP/parcels.pmtiles" \
             --title "Parcel tiles (Dallas, Collin, Denton, Tarrant, Rockwall)" \
-            --notes "Built $(date -u +%F) by the 'Refresh parcel data' workflow from TxGIO StratMap Land Parcels (county appraisal district rolls, CC0). Source details: data/parcels_source.json. The 'Deploy site' workflow copies this file into the published site as data/parcels.pmtiles; nothing needs to be pasted anywhere. Replaced wholesale by the next build."
+            --notes "Built $(date -u +%F) by the 'Refresh parcel data' workflow from TxGIO StratMap Land Parcels (county appraisal district rolls, CC0). Source details (release, roll year, any county built from an older release): data/parcels_source.json. The 'Deploy site' workflow copies this file into the published site as data/parcels.pmtiles; nothing needs to be pasted anywhere. Replaced wholesale by the next build."
 
       - name: Commit the source description + lot statistics
         if: ${{ inputs.dry_run != true && steps.pull.outputs.skip != 'true' }}
         run: |
           git config user.name "atlas-bot"
           git config user.email "atlas-bot@users.noreply.github.com"
-          git add data/parcels_source.json data/lot_stats.json
+          git add data/parcels_source.json data/lot_stats.json data/archive 2>/dev/null || true
           git diff --cached --quiet || git commit -m "Parcel tiles + lot statistics rebuilt from TxGIO StratMap ($(date -u +%F))"
           git push
           echo "Done. The 'Deploy site (GitHub Pages)' workflow now runs automatically and publishes data/parcels.pmtiles with the page."

@@ -455,8 +455,10 @@ function switchLotsToStatic(url){
 // which scripts/build_parcels.py writes on every real run
 function parcelsSourceText(m){
   if(!m) return '';
-  const roll = m.tax_year ? m.tax_year+' appraisal rolls' : (m.acquisition_date ? 'appraisal rolls as of '+String(m.acquisition_date).slice(0,7) : 'county appraisal rolls');
-  return roll + (m.publication_date ? ', TxGIO StratMap release of '+String(m.publication_date).slice(0,7) : '') + (m.built ? ', built '+m.built : '');
+  const yrs = (m.tax_year_min && m.tax_year_max && m.tax_year_min!==m.tax_year_max) ? m.tax_year_min+'\u2013'+m.tax_year_max : m.tax_year;
+  const roll = yrs ? yrs+' appraisal rolls' : (m.acquisition_date ? 'appraisal rolls as of '+String(m.acquisition_date).slice(0,7) : 'county appraisal rolls');
+  const fb = (m.fallbacks && m.fallbacks.length) ? ' ('+m.fallbacks.join(', ')+' from the prior TxGIO release)' : '';
+  return roll + (m.publication_date ? ', TxGIO StratMap release of '+String(m.publication_date).slice(0,7) : '') + fb + (m.built ? ', built '+m.built : '');
 }
 function trySetupStaticParcels(tries){
   tries = tries || 0;

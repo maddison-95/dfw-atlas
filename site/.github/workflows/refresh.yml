@@ -31,11 +31,13 @@ jobs:
         id: hmda
         continue-on-error: true
         run: python scripts/build_hmda.py
+      - name: Keep the last good version if a new file is broken or half-empty; archive what's accepted
+        run: python scripts/keep_last_good.py data/housing.json data/schools.json internal-lending/data/hmda_stats.json
       - name: Commit if changed
         run: |
           git config user.name "atlas-bot"
           git config user.email "atlas-bot@users.noreply.github.com"
-          git add data/housing.json data/schools.json internal-lending/data/hmda_stats.json 2>/dev/null || true
+          git add data/housing.json data/schools.json internal-lending/data/hmda_stats.json data/archive 2>/dev/null || true
           git diff --cached --quiet || git commit -m "Refresh housing + schools + lot + lending data $(date -u +%F)"
           git push
       - name: Flag any failed data step

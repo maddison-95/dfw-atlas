@@ -46,6 +46,9 @@ jobs:
         run: |
           if gh release download parcels-data --pattern parcels.pmtiles --dir data --clobber 2>/dev/null; then
             ls -lh data/parcels.pmtiles
+          elif gh release download parcels-data-previous --pattern parcels.pmtiles --dir data --clobber 2>/dev/null; then
+            echo "::warning::current parcels-data release missing or unreadable -- deploying the PREVIOUS build's tiles instead"
+            ls -lh data/parcels.pmtiles
           else
             echo "No parcels-data release yet: the site deploys without lot tiles. Run 'Refresh parcel data' once to add them."
           fi
