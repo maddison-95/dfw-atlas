@@ -198,14 +198,33 @@ def unpack(zip_path, into):
     os.makedirs(into, exist_ok=True)
     with zipfile.ZipFile(zip_path) as z:
         z.extractall(into)
-    # prefer the file geodatabase (full field names, no 2 GB limit); fall back to the shapefile
-    gdbs = [p for p in glob.glob(os.path.join(into, '**', '*.gdb'), recursive=True) if os.path.isdir(p)]
-    if gdbs:
-        return gdbs[0]
-    shps = glob.glob(os.path.join(into, '**', '*.shp'), recursive=True)
-    if shps:
-        return shps[0]
+    # Every readable copy of the data in the zip, best first: the file geodatabase (full field names, no 2 GB
+    # limit), then the shapefile (names cut to 10 characters, which ALIASES maps back). Both ship in TxGIO's
+    # zips, and convert_any() tries them in order: GDAL 3.8 (what GitHub's ubuntu-latest has) cannot read the
+    # 2026 geodatabases at all ("Unhandled field type : 14", zero rows, exit code 0), but reads the shapefile.
+    gdbs = [p for p in sorted(glob.glob(os.path.join(into, '**', '*.gdb'), recursive=True)) if os.path.isdir(p)]
+    shps = sorted(glob.glob(os.path.join(into, '**', '*.shp'), recursive=True))
+    if gdbs or shps:
+        return gdbs + shps
     raise RuntimeError(f'no .gdb or .shp inside {zip_path}')
+
+
+def convert_any(srcs, county, out_path, limit=None):
+    """convert() each copy of the data in turn until one yields parcels. Writes to out_path (rewritten per try).
+    Returns (rows, mapping report, the source that worked)."""
+    last = None
+    for i, src in enumerate(srcs):
+        try:
+            with open(out_path, 'w') as fh:
+                n, rep = convert(src, county, fh, limit=limit)
+            if n > 0:
+                return n, rep, src
+            last = RuntimeError('converted 0 parcels')
+        except Exception as e:
+            last = e
+        more = ' -- trying the next copy of the data in the zip' if i + 1 < len(srcs) else ''
+        log(f'    {os.path.basename(src.rstrip("/"))}: {str(last)[:300]}{more}')
+    raise last or RuntimeError('no readable data source in the zip')
 
 
 def pick_layer(src):
@@ -260,7 +279,7 @@ def convert(src, county, out_fh, limit=None):
            '-lco', 'COORDINATE_PRECISION=6', '-lco', 'RS=NO', '-skipfailures', '-nlt', 'PROMOTE_TO_MULTI']
     if limit: cmd += ['-limit', str(limit)]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1 << 16)
-    n = 0; seen_src = None; mapping = {}; years = {}
+    n = 0; seen_src = None; mapping = {}; years = {}; fill = {}
     for line in proc.stdout:
         line = line.strip().lstrip('\x1e')
         if not line: continue
@@ -284,6 +303,19 @@ def convert(src, county, out_fh, limit=None):
         if not props['county']: props['county'] = county.title()
         else: props['county'] = re.sub(r'\s+county$', '', str(props['county']).strip(), flags=re.I).title()
         if not props['source']: props['source'] = 'TxGIO StratMap Land Parcels'
+        # Appraisal-district addresses arrive as one string, often with empty parts ("128 WALNUT LN, ,") or with the
+        # city/state/zip already inside ("1108 CIVITELLA DR, ROCKWALL, TX 75087"). Drop the empty parts, and drop the
+        # separate city when the address already names it -- the page joins address + city and would print it twice.
+        a = props.get('situs_addr')
+        if a:
+            a = ', '.join(x.strip() for x in str(a).split(',') if x.strip())
+            props['situs_addr'] = a or None
+            if a and props.get('situs_city') and str(props['situs_city']).strip().lower() in a.lower():
+                props['situs_city'] = None
+        for k in PARCEL_FIELDS:
+            # a 0 in an area column means "not provided" (the page then measures the lot from its outline)
+            if props[k] not in (None, '') and not (k in ('legal_area', 'gis_area') and not props[k]):
+                fill[k] = fill.get(k, 0) + 1
         if props['tax_year']: years[props['tax_year']] = years.get(props['tax_year'], 0) + 1
         out = {'type': 'Feature', 'properties': props, 'geometry': g}
         pid = props.get('prop_id')
@@ -296,6 +328,7 @@ def convert(src, county, out_fh, limit=None):
     if err.strip():
         log(f'    ogr2ogr notes: {err.strip().splitlines()[-1][:200]}')
     return n, {'layer': layer, 'source_fields': seen_src or [], 'mapped': mapping, 'years': years,
+               'filled_pct': {k: round(100 * v / n) for k, v in fill.items()} if n else {},
                'missing': [k for k in PARCEL_FIELDS if k not in mapping and k not in ('county', 'source')]}
 
 
@@ -305,6 +338,13 @@ def report_mapping(county, rep):
     log(f'    mapped: ' + ', '.join(f'{k}<-{v}' for k, v in rep['mapped'].items()))
     if rep['missing']:
         log(f'    !! not found in this county\'s file (popup shows a dash for these): {", ".join(rep["missing"])}')
+    pct = rep.get('filled_pct') or {}
+    if pct:
+        # also an annotation: visible on the run's summary page without opening the log (a notice, not a failure)
+        keys = ['legal_area', 'gis_area', 'situs_addr', 'situs_zip', 'mkt_value', 'imp_value', 'year_built', 'stat_land_use', 'tax_year']
+        line = ', '.join(f'{k} {pct.get(k, 0)}%' for k in keys)
+        log(f'    share of parcels with a value: {line}')
+        annotate('notice', f'{county}: share of parcels with a value -- {line}')
 
 
 # ---------------------------------------------------------------- main
@@ -373,11 +413,12 @@ def main():
         log(f'\nDownloading the smallest county ({c}) to check the schema...')
         work = os.path.join(args.work, f'parcels_{c.lower()}'); os.makedirs(work, exist_ok=True)
         zp = res['url'] if c in local else fetch_zip(res['url'], os.path.join(work, 'src.zip'))
-        src = unpack(zp, os.path.join(work, 'x'))
-        import io
-        buf = io.StringIO(); n, rep = convert(src, c, buf, limit=3)
+        srcs = unpack(zp, os.path.join(work, 'x'))
+        sample = os.path.join(work, 'sample.ndjson')
+        n, rep, used = convert_any(srcs, c, sample, limit=3)
+        log(f'  read from: {os.path.basename(used.rstrip("/"))}')
         report_mapping(c, rep)
-        for line in buf.getvalue().splitlines():
+        for line in open(sample).read().splitlines():
             f = json.loads(line); log('  sample: ' + json.dumps(f['properties'], separators=(',', ':')))
         if not args.keep: shutil.rmtree(work, ignore_errors=True)
         return
@@ -392,12 +433,10 @@ def main():
             zp = fetch_zip(res['url'], os.path.join(work, f'src_{release["collection_id"][:8]}.zip'))
         else:
             zp = zp_or_none
-        src = unpack(zp, os.path.join(work, 'x_' + release['collection_id'][:8] if release else 'x_local'))
+        srcs = unpack(zp, os.path.join(work, 'x_' + release['collection_id'][:8] if release else 'x_local'))
         tmp = os.path.join(work, 'county.ndjson')
-        with open(tmp, 'w') as tfh:
-            n, rep = convert(src, c, tfh)
-        if n == 0:
-            raise RuntimeError('converted 0 parcels')
+        n, rep, used = convert_any(srcs, c, tmp)      # raises if no copy of the data in the zip yields parcels
+        log(f'    read from: {os.path.basename(used.rstrip("/"))}')
         return n, rep, tmp
 
     grand = 0; all_years = {}; meta['county_source'] = {}; meta['fallbacks'] = []

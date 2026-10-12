@@ -385,6 +385,14 @@ ordinary home or office connection. The build therefore looks for each county zi
 When TxGIO publishes the next yearly release the file names change (`stratmap27-…`), so a stale mirror is never
 used by mistake; repeat steps 1–3 then (or the build may be able to reach TxGIO directly by then).
 
+**Two things learned from the first real runs (Oct 2026).** (1) Each county zip holds the data twice, as a file
+geodatabase and as a shapefile. The geodatabase uses a field type that GDAL 3.8 (what GitHub's `ubuntu-latest`
+has) can't read — it returns zero rows and exit code 0 — so the build tries the geodatabase first and falls back to
+the shapefile automatically. (2) TxGIO's rolls are uneven by county: e.g. Rockwall supplies `year_built` for no lots
+and a legal area for only about a third; the page then shows a dash for year built and measures the lot from its
+outline. Every run's summary page lists, per county, the share of lots with each value. The build also keeps only
+the 19 fields the popup shows — owner names and mailing addresses in the source files are dropped on purpose.
+
 After that it's automatic: the parcels Action checks quarterly whether TxGIO has published a newer release
 and rebuilds only if so (tick "Force" to rebuild regardless — after a script change, for instance).
 
