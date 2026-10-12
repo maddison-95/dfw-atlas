@@ -36,13 +36,30 @@ PURPOSE_NAMES = {'1': 'Home purchase', '31': 'Refinance', '32': 'Cash-out refina
 CONSTRUCTION_NAMES = {'1': 'Site-built', '2': 'Manufactured home'}
 
 
+BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+LAST_ERROR = [None]
+
+
+def annotate(level, msg):
+    """GitHub Actions annotation: shows on the run's summary page, readable without opening the step log."""
+    print(f"::{level}::" + str(msg).replace('%', '%25').replace('\r', ' ').replace('\n', ' ')[:900], flush=True)
+
+
 def query(year, county, **params):
     p = {'years': year, 'counties': county}
     p.update(params)
     url = API + '?' + urllib.parse.urlencode(p)
-    req = urllib.request.Request(url, headers={'User-Agent': 'dfw-atlas-builder/1.0'})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read())
+    last = None
+    for ua in ('dfw-atlas-builder/1.0', BROWSER_UA):   # some public APIs refuse robot User-Agents from cloud IPs
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': ua, 'Accept': 'application/json'})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code not in (403, 406, 429):
+                break
+    raise last
 
 
 def try_year(year, county):
@@ -53,6 +70,7 @@ def try_year(year, county):
         b = query(year, county, construction_methods='1,2', actions_taken=1)
     except Exception as e:
         print(f'    {county} {year}: request failed: {e}')
+        LAST_ERROR[0] = f'{county} {year}: {type(e).__name__}: {e}'
         return None
     if not a.get('aggregations') and not b.get('aggregations'):
         return None
@@ -97,6 +115,7 @@ def main():
     if not counties_out:
         # Same rule as the other refresh scripts: an empty result must not overwrite the last good file.
         print('REFUSING TO WRITE data/hmda_stats.json: no county returned any data. The existing file was left untouched.')
+        annotate('error', f'HMDA: no county returned data, existing file kept. Last error: {LAST_ERROR[0]}')
         raise SystemExit(1)
 
     out = {
