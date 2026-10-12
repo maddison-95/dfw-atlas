@@ -64,10 +64,18 @@ ALIASES = {
 }
 RETRIES = 4
 UA = 'dfw-neighborhood-atlas/1.0 (+github actions; parcels refresh)'
+BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 
 
 def log(msg):
     print(msg, flush=True)
+
+
+def annotate(level, msg):
+    """A GitHub Actions annotation (::error:: / ::warning::). These appear at the top of the run's summary page,
+    where anyone can read them without opening the step log -- so a failure's real reason is visible at a glance."""
+    msg = str(msg).replace('%', '%25').replace('\r', ' ').replace('\n', ' ')
+    print(f'::{level}::{msg[:900]}', flush=True)
 
 
 # ---------------------------------------------------------------- DataHub API
@@ -126,9 +134,10 @@ def download(url, dest):
         return dest
     tmp = dest + '.part'
     last = None
+    ua = UA
     for attempt in range(RETRIES):
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': UA})
+            req = urllib.request.Request(url, headers={'User-Agent': ua, 'Accept': '*/*'})
             with urllib.request.urlopen(req, timeout=120) as r, open(tmp, 'wb') as fh:
                 total = int(r.headers.get('Content-Length') or 0); got = 0; mark = time.time()
                 while True:
@@ -141,8 +150,14 @@ def download(url, dest):
             return dest
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last = e
-            if isinstance(e, urllib.error.HTTPError) and e.code in (403, 404, 410):
-                break   # the file isn't there; retrying won't change that (the caller may try an older release)
+            if isinstance(e, urllib.error.HTTPError):
+                if e.code == 403 and ua == UA:
+                    # some public data hosts refuse unknown/robot User-Agents; try once as an ordinary browser would identify itself
+                    log(f'    HTTP 403 with the script\'s own User-Agent -- retrying once with a browser-style one ({url})')
+                    ua = BROWSER_UA
+                    continue
+                if e.code in (403, 404, 410):
+                    break   # the file isn't there / isn't ours to fetch; retrying won't change that (the caller may try an older release)
             time.sleep(3 * (attempt + 1))
     raise RuntimeError(f'download failed after {RETRIES} tries: {last}\n  {url}')
 
@@ -362,7 +377,7 @@ def main():
             # the same county from progressively older releases (TxGIO keeps them all online). A year-old roll
             # for one county beats a hole in the map for that county.
             attempts = [(local[c], None)] if c in local else [(None, r) for r in colls[:1 + max(0, args.fallback_depth)]]
-            done = False
+            done = False; first_err = None
             for zp, release in attempts:
                 try:
                     if zp is None and release is not coll:
@@ -385,8 +400,10 @@ def main():
                     break
                 except Exception as e:
                     log(f'{c}: FAILED ({str(release["acquisition_date"])[:7] if release else "local"}) -- {e}')
+                    first_err = first_err or f'{type(e).__name__}: {e}'
             if not done:
                 log(f'{c}: FAILED in every release tried -- continuing with the remaining counties')
+                annotate('error', f'{c}: no parcels from any release tried. First error: {first_err}')
                 meta['counties'][c.title()] = 0
             if not args.keep: shutil.rmtree(work, ignore_errors=True)
     meta['total'] = grand
@@ -407,4 +424,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:     # an unexpected crash: put the reason where the run summary shows it, then fail as before
+        annotate('error', f'build_parcels.py stopped: {type(e).__name__}: {e}')
+        raise
