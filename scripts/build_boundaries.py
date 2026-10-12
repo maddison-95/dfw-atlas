@@ -369,6 +369,7 @@ def stage_plats(parcels_path, dry_run=False):
     from shapely.geometry import shape as shp, Point
     from shapely.ops import unary_union
     from shapely.strtree import STRtree
+    from shapely.validation import make_valid
     geo = json.load(open(os.path.join(DATA, 'geo.json')))
     meta = json.load(open(os.path.join(DATA, 'areas_meta.json')))
     atlas = json.load(open(os.path.join(DATA, 'atlas.json')))
@@ -396,6 +397,14 @@ def stage_plats(parcels_path, dry_run=False):
             try: g = shp(f['geometry'])
             except Exception: continue
             if g.is_empty: continue
+            if not g.is_valid:                                # CAD lot polygons are often self-touching; repair, keep polygons only
+                g = make_valid(g)
+                if g.geom_type == 'GeometryCollection':
+                    ps = [x for x in g.geoms if x.geom_type in ('Polygon', 'MultiPolygon')]
+                    if not ps: continue
+                    g = unary_union(ps)
+                elif g.geom_type not in ('Polygon', 'MultiPolygon'): continue
+                if g.is_empty: continue
             c = g.representative_point()
             ci = [i for i in city_tree.query(c) if cities[city_names[i]].contains(c)]
             if not ci: continue                            # outside every covered city
@@ -446,7 +455,11 @@ def stage_plats(parcels_path, dry_run=False):
 
     def fuse(idxs):
         m = STREET_FUSE_M / 111320.0
-        g = unary_union([lot_geoms[i] for i in idxs]).buffer(m).buffer(-m).buffer(0)
+        try:
+            u = unary_union([lot_geoms[i] for i in idxs])
+        except Exception:                                     # a stubborn lot: repair each piece, then merge
+            u = unary_union([make_valid(lot_geoms[i]).buffer(0) for i in idxs])
+        g = u.buffer(m).buffer(-m).buffer(0)
         return g.simplify(SIMPLIFY_DEG, preserve_topology=True)
 
     rows = []
@@ -560,4 +573,11 @@ def main():
         stage_plats(a.parcels, a.dry_run)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException as e:                                # surface the real reason on the Actions run page (no sign-in needed)
+        msg = f'{type(e).__name__}: {e}'.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')[:900]
+        print(f'::error::build_boundaries crashed -- {msg}', flush=True)
+        raise
