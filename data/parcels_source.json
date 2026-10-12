@@ -1,0 +1,48 @@
+{
+ "built": "2026-10-12",
+ "counties": {
+  "Dallas": 697171,
+  "Collin": 387736,
+  "Denton": 353631,
+  "Tarrant": 765647,
+  "Rockwall": 55134
+ },
+ "collection_id": "1d33dafb-6e9c-40ac-887d-f4577909ed9b",
+ "acquisition_date": "2026-09-25",
+ "publication_date": "2026-10-01",
+ "license": "Creative Commons Zero v1.0 Universal",
+ "source": "Various Appraisal Districts",
+ "county_source": {
+  "Dallas": {
+   "collection_id": "1d33dafb-6e9c-40ac-887d-f4577909ed9b",
+   "acquisition_date": "2026-09-25",
+   "publication_date": "2026-10-01"
+  },
+  "Collin": {
+   "collection_id": "1d33dafb-6e9c-40ac-887d-f4577909ed9b",
+   "acquisition_date": "2026-09-25",
+   "publication_date": "2026-10-01"
+  },
+  "Denton": {
+   "collection_id": "1d33dafb-6e9c-40ac-887d-f4577909ed9b",
+   "acquisition_date": "2026-09-25",
+   "publication_date": "2026-10-01"
+  },
+  "Tarrant": {
+   "collection_id": "1d33dafb-6e9c-40ac-887d-f4577909ed9b",
+   "acquisition_date": "2026-09-25",
+   "publication_date": "2026-10-01"
+  },
+  "Rockwall": {
+   "collection_id": "1d33dafb-6e9c-40ac-887d-f4577909ed9b",
+   "acquisition_date": "2026-09-25",
+   "publication_date": "2026-10-01"
+  }
+ },
+ "fallbacks": [],
+ "total": 2259319,
+ "tax_year": 2026,
+ "tax_year_min": 2026,
+ "tax_year_max": 2026,
+ "pmtiles_bytes": 166766192
+}
