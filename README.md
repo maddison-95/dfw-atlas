@@ -1,4 +1,4 @@
-# DFW Neighborhood Atlas — site bundle (v14: real boundaries — town limits now, lot lines via the rebuild workflow)
+# DFW Neighborhood Atlas — site bundle (v15: lot data from our own parcel tiles — the live state feed is gone)
 
 This folder is the whole website. Nothing runs on a server: one HTML page, a few data files, and the scripts
 that refresh the data (mostly run automatically by GitHub Actions).
@@ -14,13 +14,22 @@ data/atlas.json          a slimmer neighborhood list the refresh scripts read �
 data/housing.json        home values, rents, sales, Census figures — written by scripts/refresh_housing.py
 data/schools.json        schools with level, type, location, TEA rating — written by scripts/refresh_schools.py
 data/lot_stats.json      median lot size/value/home age per neighborhood — written by scripts/refresh_lots.py
-data/config.json         site keys read on load (Esri key for aerial imagery; self-hosted parcel-tiles URL) —
-                          edit on GitHub, no rebuild
+                          inside the "Refresh parcel data" Action (from the downloaded parcel file)
+data/parcels_source.json which TxGIO parcel release the tiles and lot stats were built from, and when —
+                          written by the "Refresh parcel data" Action; the lot popup quotes it
+data/archive/<YYYY-MM>/  dated copies of every accepted data file (housing, schools, lot stats, lending), kept 36
+                          months — written by scripts/keep_last_good.py; roll back by copying one over the live file
+scripts/keep_last_good.py the guard that runs before every data commit: rejects a broken or half-empty file (keeps
+                          the last good one) and archives what it accepts
+data/parcels.pmtiles     NOT in the repo: the parcel tiles (hundreds of MB) live on the repo's "parcels-data"
+                          release and are copied into the published site by the "Deploy site" Action
+data/config.json         site keys read on load (Esri key for aerial imagery; optional parcel-tiles URL if the
+                          tiles are hosted somewhere other than the site itself) — edit on GitHub, no rebuild
 data/rate.json           the rate / down payment / tax / insurance assumptions behind the payment estimate —
                           EDIT THIS ON GITHUB WHEN RATES MOVE (no code change needed)
 data-sources/            the two files you download by hand (TEA ratings, NCES private schools)
-scripts/build_parcels.py builds the self-hosted parcel-tiles data (README section 7); run by the
-                          "Refresh parcel data" Action, not something you run by hand
+scripts/build_parcels.py downloads TxGIO's bulk county parcel files and normalizes them (README section 7);
+                          run by the "Refresh parcel data" Action, not something you run by hand
 scripts/build_boundaries.py rebuilds every neighborhood shape from real data (README section 8) — exact
                           town limits (already applied in this bundle) and, via the "Rebuild neighborhood
                           boundaries" Action, lot-exact lines from county plat records
@@ -35,6 +44,38 @@ internal-lending/worker/register.js   the Cloudflare Worker source that checks t
                           each registration — deploy it per internal-lending/README.md's setup steps.
 robots.txt               tells search engines to skip internal-lending/
 ```
+
+## What's new in v15
+
+* **Lot clicks work again, and no longer depend on anyone's live server.** Since v1 the "Lot lines & sizes"
+  layer queried the Texas Geographic Information Office's live ArcGIS parcel service on every pan. In late
+  September 2026 that service began rejecting every query ("Requested operation is not supported by this
+  service") while still advertising query support — so a click on a lot showed nothing. Nothing in the page
+  was wrong; the third party under it was. (Independent projects hit the identical error on the identical
+  URL the same week; there is no newer service to switch to — the TxGIO service folder lists exactly one.)
+  The fix removes the dependency: TxGIO publishes the *same* dataset (StratMap Land Parcels — every county
+  appraisal district's roll, one schema, CC0) as plain bulk downloads on its DataHub, one zip per county.
+  The rewritten **"Refresh parcel data" Action** downloads the five DFW counties (~1 GB), tiles them, and the
+  new **"Deploy site" Action** publishes the tile file next to the page as `data/parcels.pmtiles`. The page
+  reads lot lines and click data from its own address. One-time setup: section 7 (two clicks, then run the
+  Action once).
+* **Lot statistics (median lot size / land value / home age) come from the same file.** `refresh_lots.py` no
+  longer makes ~250 live queries in the monthly refresh (which was also failing); it runs inside the parcels
+  Action, offline, in a couple of minutes.
+* **Unit bug fixed in the lot popup and the lot stats:** a unit string of `ACRES` was being treated as square
+  feet (the test looked for a bare `S`), dividing real acreages by 43,560. Lot sizes now read correctly for
+  every unit spelling the counties use (ACRES/AC vs SQFT/SF/SQ FT/FEET).
+* **Honest status when data can't load:** instead of a silent empty box the lot hint now says the state feed
+  isn't answering (and, once the tiles exist, that they and the feed both failed, if that ever happens).
+* `data/parcels_source.json` records the exact TxGIO release (roll year, publication date, build date, size);
+  the popup footer quotes it, so a Realtor can see how current the numbers are.
+* Hosting note: GitHub *release* downloads do not send CORS headers (verified), so the v13 plan of reading
+  tiles from a release URL would have been blocked by the browser. Publishing them with the site avoids that.
+* **Older data is kept and used as a fallback, at every level** (section 9): a county whose newest TxGIO file
+  won't download or convert is built from that county's file in the previous TxGIO release (they keep every
+  year online); the previous tile build is kept as a second release and the deploy uses it if the current one
+  is missing; and the monthly files (housing, schools, lending, lot stats) go through a keep-last-good guard
+  that refuses a broken or half-empty file and archives every accepted version under `data/archive/<month>/`.
 
 ## What's new in v14
 
@@ -66,9 +107,9 @@ robots.txt               tells search engines to skip internal-lending/
   ~2,000-parcel cap ("zoom in more"). A new **"Refresh parcel data" Action** (`scripts/build_parcels.py` +
   `.github/workflows/refresh_parcels.yml`) pulls the same feed for the five DFW counties once, quarterly, and
   publishes it as a single self-hosted file on this repo's own GitHub Release -- no new account, no cost.
-  Nothing changes until you opt in: see section 7 below. The live feed keeps working exactly as before either
-  way; this is a faster, more resilient alternative sitting next to it, not a replacement that could break
-  something.
+  (Superseded in v15: the live feed died, the release-URL approach turned out to be blocked by CORS, and the
+  tiles are now published with the site and built from TxGIO's bulk files — see "What's new in v15" and
+  section 7.)
 * Vendored `pmtiles.js` (the small reader library that makes a self-hosted, static `.pmtiles` file behave
   like a live map layer, via plain byte-range HTTP requests) alongside the existing MapLibre files.
 
@@ -220,9 +261,10 @@ robots.txt               tells search engines to skip internal-lending/
 
 1. Create a free account at github.com. Click **New repository**, name it `dfw-atlas`, leave it Public, click Create.
 2. Copy this folder's contents into the repository (GitHub Desktop: commit, then Push origin).
-3. In the repo go to **Settings → Pages**. Under "Build and deployment" choose Source: *Deploy from a branch*,
-   Branch: *main*, folder */ (root)*. Save. After a minute the page shows your address:
-   `https://YOURNAME.github.io/dfw-atlas/`. That link is the live map.
+3. In the repo go to **Settings → Pages**. Under "Build and deployment" choose Source: **GitHub Actions**
+   (not "Deploy from a branch" — v15 changed this, see section 7 for why). Then **Actions** tab → "Deploy site
+   (GitHub Pages)" → **Run workflow** once. After a minute or two Settings → Pages shows your address:
+   `https://YOURNAME.github.io/dfw-atlas/`. That link is the live map, and it redeploys itself on every change.
 4. To put it on your own site, add one line where the map should appear (WordPress: a "Custom HTML" block):
    ```html
    <iframe src="https://maps.michaeladdison.ai/" style="width:100%;height:90vh;border:0;border-radius:16px" title="DFW Neighborhood Atlas" loading="lazy"></iframe>
@@ -236,10 +278,9 @@ robots.txt               tells search engines to skip internal-lending/
    Actions → New repository secret** named `CENSUS_KEY`. (Done.)
 2. **Actions** tab → "Refresh housing + schools + lot data" → **Run workflow**. It downloads Zillow's ZHVI/ZORI
    files and the Census figures, pulls public-school locations from the NCES open-data feed, merges the TEA
-   ratings and private schools from `data-sources/`, queries the state's parcel feed for each neighborhood's
-   median lot size/value/home age, writes `data/housing.json`, `data/schools.json` and `data/lot_stats.json`,
-   and commits them. It repeats on the 3rd of every month. (The lot-stats step alone takes the longest — it's
-   one query per neighborhood, roughly 15-20 minutes for the current neighborhood count; that's normal.)
+   ratings and private schools from `data-sources/`, writes `data/housing.json` and `data/schools.json`, and
+   commits them. It repeats on the 3rd of every month. (Lot statistics moved to the parcels Action in v15,
+   section 7.)
 3. Optional sales data (median sale price, days on market): download `zip_code_market_tracker.tsv000.gz` from
    https://www.redfin.com/news/data-center/ and run locally:
    `python scripts/refresh_housing.py --census-key KEY --redfin zip_code_market_tracker.tsv000.gz`, then commit
@@ -300,35 +341,60 @@ and you can set a hard budget cap there.
 every lot popup has **Street View ↗ / Google Maps ↗ / Search address ↗** links — those are plain Google Maps
 links (no key, no cost) that open the lot in Street View or Google Maps in a new tab.
 
-## 7. Self-hosted parcel data (optional, ~2 minutes once the workflow has run)
+## 7. Parcel tiles — the lot layer's data (one-time setup, ~5 minutes of your time)
 
-The **"Lot lines & sizes"** layer has, since v1, queried a live third-party feed (the Texas Geographic
-Information Office's statewide parcel service, which is itself built from the five county appraisal
-districts' own rolls) once per pan or zoom. That's kept working fine, but it does mean a visitor's map leans
-on that service's uptime and its ~2,000-parcel-per-request cap, and every visitor re-downloads the same lines
-for a popular area instead of it being cached anywhere.
+**What it is.** The **"Lot lines & sizes"** layer (every parcel outline, and the click popup with address, lot
+size, dimensions, year built, land/improvement/market value and legal description) is built from the Texas
+Geographic Information Office's *StratMap Land Parcels* — the five county appraisal districts' own rolls
+(Dallas/DCAD, Collin, Denton, Tarrant, Rockwall), normalized to one schema and released under CC0. TxGIO
+publishes it as bulk downloads, one zip per county, about once a year. The **"Refresh parcel data" Action**
+downloads those five zips (~1 GB), converts them with GDAL, tiles them with tippecanoe into a single
+`parcels.pmtiles` (zoom 15 only — the layer is hidden below that, and the map over-zooms above it), computes
+`data/lot_stats.json` from the same file, stores the tile file on the repo's `parcels-data` release, and
+commits `data/parcels_source.json` (which release, roll year, build date). The **"Deploy site" Action** then
+publishes the site with that tile file at `data/parcels.pmtiles`. The page looks for that file on its own
+address at load; if it's there, the layer is served from it and nothing is ever queried live.
 
-A **"Refresh parcel data" Action** now exists to build a self-hosted alternative: it pulls that same feed
-once (for Dallas, Collin, Denton, Tarrant and Rockwall counties), tiles it, and publishes the result as a
-single file on this repo's own GitHub Release — no new account, no cost, nothing beyond what you already
-have. It runs automatically every quarter (appraisal rolls barely change month to month), or any time from
-the **Actions** tab → **Refresh parcel data (self-hosted lots)** → **Run workflow** (tick "Dry run" first if
-you just want to sanity-check the county/field matching without publishing anything).
+**Why the deploy changed.** The tile file is several hundred MB. Git won't take a file over 100 MB, and
+GitHub *release* downloads don't send the CORS header a browser needs to read a file from another address
+(checked) — but a site deployed by GitHub Actions can include any file, and it's the same origin as the page.
+So the site is now deployed by the "Deploy site" workflow instead of straight from the branch. Everything else
+about hosting (custom domain, HTTPS, the iframe) is unchanged, and every push or data refresh still redeploys.
 
-**Turning it on** (skip this entirely and the map keeps using the live feed, exactly as before):
-1. Let the workflow run once (it's on a schedule, or trigger it by hand from the Actions tab).
-2. Open its log (or the repo's **Releases** page → the `parcels-data` release → the `.pmtiles` asset) and
-   copy the asset's download URL.
-3. Edit `data/config.json` (GitHub web editor is fine): paste that URL between the quotes of
-   `"parcels_pmtiles_url": ""`. Commit. No rebuild needed — the page reads that file on load.
-4. Reload the map and zoom into any neighborhood — lot lines now come from the self-hosted snapshot instead
-   of the live query, and the lot popup's footer says so. The live feed is still there as the fallback if the
-   self-hosted file is ever unreachable (a browser-console warning says so if that happens).
+**Turning it on:**
+1. Repo **Settings → Pages → Build and deployment → Source: GitHub Actions**. (If it says "Deploy from a
+   branch", change it. The custom-domain box below it stays as is.)
+2. **Actions** tab → **Refresh parcel data (self-hosted lots)** → **Run workflow** (leave both boxes unticked;
+   tick "Dry run" first if you'd like to see the county files and field names it found without building
+   anything). The full build takes roughly 30–60 minutes: ~1 GB of downloads, then tiling ~2.5 million lots.
+3. When it finishes, the **Deploy site** workflow starts on its own (a minute or two). Reload the map, zoom
+   into any street: lot lines appear, a click shows the popup, and its footer names the roll year and build
+   date from `data/parcels_source.json`.
 
-Nothing needs re-pasting after the first time: the workflow replaces the same release each quarter, so the
-URL in `data/config.json` keeps pointing at the current data automatically.
+After that it's automatic: the parcels Action checks quarterly whether TxGIO has published a newer release
+and rebuilds only if so (tick "Force" to rebuild regardless — after a script change, for instance).
+
+**If the file is too big for GitHub Pages** (sites are capped at 1 GB; the Action warns at 880 MB, first
+retries without the long text fields — legal description and land-use codes — and only then stops): host the
+tile file somewhere with no size cap and paste its URL into `data/config.json` → `parcels_pmtiles_url`. Any
+static host that allows byte-range reads and sends `Access-Control-Allow-Origin` works; the usual free choice
+is a Cloudflare R2 bucket (10 GB free, no egress fee, CORS set in the bucket settings) — the same Cloudflare
+account the internal-lending gate uses. Ask Claude for the two-line upload step to add to the workflow when
+that day comes; it hasn't yet.
+
+**Fallback behavior.** With no tile file the page still tries TxGIO's live ArcGIS service (the pre-v15 path);
+since that service stopped answering queries in September 2026 the hint under the toggle says so plainly
+rather than showing an empty layer. If the tile file exists but can't be read (a broken deploy, say), the page
+falls back the same way once, for that visit, and logs a browser-console warning.
+
+**Data notes.** TxGIO describes the parcels as "not survey grade" and "as-is" from the appraisal districts;
+the popup already says dimensions are estimated and to verify with a survey. Values are the CAD's assessed
+figures for the roll year shown, not market opinions. Attribution ("County appraisal district via TxGIO
+StratMap") stays on every popup.
 
 ## 8. Boundary rebuild — lot-exact neighborhood lines (~10 minutes of your time, once)
+
+(Uses the same parcel download as section 7; it does not need section 7 to have been set up first.)
 
 **What "accurate" means here.** A town has a legal boundary; a neighborhood like Preston Hollow does not — no
 city, county or appraisal district publishes one. What *is* on record, to the lot, is the platted subdivision
@@ -368,6 +434,24 @@ a few percent of lots per county come through without one — those join the nea
 street's width or two, otherwise they stay with the town shape. Condo and commercial parcels are lots too, so
 downtown-type neighborhoods snap to their building footprints. Gaps that remain after the rebuild are real:
 parks, lakes, rail yards, unplatted land — listed per city in the report.
+
+## 9. Fallbacks and rollback — what happens when a source won't pull
+
+Every data source here is somebody else's server, and each one has been down at least once. The rule
+throughout is *never replace good data with nothing*:
+
+| Layer | If the new pull fails… | Kept where | Roll back by hand |
+| --- | --- | --- | --- |
+| Parcel tiles, one county | That county is built from the **previous TxGIO release** (they keep every year online; up to 3 releases back). `data/parcels_source.json` lists which counties fell back, the popup footer says so, and the next quarterly run retries the newest release. | TxGIO DataHub | — |
+| Parcel tiles, whole build | Nothing is published (a partial build exits non-zero), so the live site keeps the current tiles. The build before that is kept as the `parcels-data-previous` release; the deploy uses it automatically if `parcels-data` is ever missing. | Repo Releases | Releases page → delete `parcels-data`, rename `parcels-data-previous` to `parcels-data` (edit → tag), run "Deploy site" |
+| Lot statistics | `keep_last_good.py` rejects the new `lot_stats.json` if it's invalid or lost >40% of its records; the committed version stays. | `data/archive/<month>/` | Copy the archived file over `data/lot_stats.json`, commit |
+| Housing, schools, lending | Same guard, same archive, in the monthly refresh. A failed *script* never touches the file at all (each step is independent). | `data/archive/<month>/` | Same |
+| Neighborhood boundaries | The rebuild opens a **pull request**; nothing changes until you merge it. | Git history | Revert the merge commit |
+| Basemap / aerial | Not ours to cache (OpenFreeMap and Esri terms); the page keeps working with the last-loaded tiles. | — | — |
+
+Archives are pruned after 36 months; `data/archive/index.json` lists what's there. Nothing in this section
+needs a decision from you — it's how the workflows behave by default. When the log shows a `::warning::` line,
+that's the moment something fell back; the site is still fine, the warning says what to look at.
 
 ## Attribution shown on the page
 Basemap © OpenStreetMap contributors, served by OpenFreeMap. Zip areas: U.S. Census ZCTA. Home values and rents:

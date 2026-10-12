@@ -94,6 +94,11 @@ def main():
         counties_out[fips] = out
         print(f'  {name}: ' + ', '.join(f"{k}={v['count']}" for k, v in out.items() if isinstance(v, dict)))
 
+    if not counties_out:
+        # Same rule as the other refresh scripts: an empty result must not overwrite the last good file.
+        print('REFUSING TO WRITE data/hmda_stats.json: no county returned any data. The existing file was left untouched.')
+        raise SystemExit(1)
+
     out = {
         'asof': datetime.date.today().isoformat(),
         'year': used_year,

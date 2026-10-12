@@ -1,7 +1,7 @@
 name: Rebuild neighborhood boundaries (lot-exact)
 # Rebuilds every neighborhood shape from real data -- exact town limits (Census TIGER 2024), then every
 # neighborhood snapped to the platted subdivisions whose lots fall inside it (from the same TxGIO parcel
-# feed scripts/build_parcels.py already pulls), with otherwise-uncovered streets added as their own
+# files scripts/build_parcels.py downloads), with otherwise-uncovered streets added as their own
 # plat-named units so no house is left outside a neighborhood. Zip outlines are replaced with real Census
 # ZCTA shapes and each neighborhood's zip list is re-derived from what it actually overlaps.
 #
@@ -29,10 +29,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install shapely pyshp
+      - run: |
+          pip install shapely pyshp
+          sudo apt-get update -qq && sudo apt-get install -y -qq gdal-bin
 
-      - name: Pull parcel data (five counties, same feed as the parcels workflow)
-        run: python scripts/build_parcels.py --out /tmp/parcels.ndjson
+      - name: Download parcel data (five counties, ~1 GB from TxGIO's bulk files -- same script as the parcels workflow)
+        run: python scripts/build_parcels.py --out /tmp/parcels.ndjson --work "$RUNNER_TEMP"
 
       - name: Stage 1 -- exact town limits, clip, de-overlap
         run: python scripts/build_boundaries.py --stage municipal

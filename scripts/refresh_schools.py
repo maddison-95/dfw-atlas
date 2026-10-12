@@ -192,6 +192,18 @@ def main():
             n += 1
         print(f'{n} private schools in area')
 
+    # Never replace a working schools.json with a broken one. If the public-school pull failed outright, or came
+    # back without the district names / grade spans the page's Schools tab depends on, stop here WITHOUT writing:
+    # the committed file stays as it was and this step shows red in the Actions run (which sends the failure email).
+    pub = [s for s in schools if s['type'] != 'private']
+    no_district = sum(1 for s in pub if not s.get('district'))
+    all_k12 = bool(pub) and all(s.get('level') == 'K12' for s in pub)
+    if not pub or no_district > 0.2 * len(pub) or all_k12:
+        print(f'REFUSING TO WRITE data/schools.json: {len(pub)} public campuses, {no_district} without a district name, '
+              f'all-K12={all_k12}. The NCES layer is unreachable or no longer carries district / grade-span fields. '
+              f'The existing file was left untouched.')
+        sys.exit(1)
+
     out = {'asof': datetime.date.today().isoformat(),
            'source': 'NCES EDGE (locations) + TEA Accountability (ratings)' + (' + NCES PSS (private)' if a.private else ''),
            'districts': {}, 'schools': schools}

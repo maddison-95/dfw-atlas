@@ -12,8 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      # Each data step is independent: if one source is down for the day (TxGIO's parcel server, Zillow's CSV
-      # host, the CFPB API) the others still refresh and get committed. The last step then fails the run if
+      # Each data step is independent: if one source is down for the day (Zillow's CSV host, the CFPB API) the
+      # others still refresh and get committed. (Lot statistics moved to the "Refresh parcel data" workflow in
+      # v15 -- they're computed from the downloaded parcel file there, not queried live here any more.) The last step then fails the run if
       # any step failed, so it still shows red and still sends the failure email -- it just no longer throws
       # away the steps that worked.
       - name: Build housing.json
@@ -26,24 +27,22 @@ jobs:
         id: schools
         continue-on-error: true
         run: python scripts/refresh_schools.py --ratings data-sources/tea_ratings.csv --private data-sources/pss.csv
-      - name: Build lot_stats.json
-        id: lots
-        continue-on-error: true
-        run: python scripts/refresh_lots.py
       - name: Build internal lending-signals data (not part of the public map)
         id: hmda
         continue-on-error: true
         run: python scripts/build_hmda.py
+      - name: Keep the last good version if a new file is broken or half-empty; archive what's accepted
+        run: python scripts/keep_last_good.py data/housing.json data/schools.json internal-lending/data/hmda_stats.json
       - name: Commit if changed
         run: |
           git config user.name "atlas-bot"
           git config user.email "atlas-bot@users.noreply.github.com"
-          git add data/housing.json data/schools.json data/lot_stats.json internal-lending/data/hmda_stats.json 2>/dev/null || true
+          git add data/housing.json data/schools.json internal-lending/data/hmda_stats.json data/archive 2>/dev/null || true
           git diff --cached --quiet || git commit -m "Refresh housing + schools + lot + lending data $(date -u +%F)"
           git push
       - name: Flag any failed data step
-        if: steps.housing.outcome == 'failure' || steps.schools.outcome == 'failure' || steps.lots.outcome == 'failure' || steps.hmda.outcome == 'failure'
+        if: steps.housing.outcome == 'failure' || steps.schools.outcome == 'failure' || steps.hmda.outcome == 'failure'
         run: |
           echo "One or more data steps failed (see above). Whatever succeeded was still committed."
-          echo "housing=${{ steps.housing.outcome }} schools=${{ steps.schools.outcome }} lots=${{ steps.lots.outcome }} hmda=${{ steps.hmda.outcome }}"
+          echo "housing=${{ steps.housing.outcome }} schools=${{ steps.schools.outcome }} hmda=${{ steps.hmda.outcome }}"
           exit 1

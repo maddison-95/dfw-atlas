@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DFW Neighborhood Atlas</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&display=swap">
 <link rel="stylesheet" href="%%MAPLIBRE_CSS%%">
@@ -29,7 +29,7 @@ html,body{height:100%}
 body{margin:0;background:var(--ground);color:var(--ink);font-family:"DM Sans",system-ui,Segoe UI,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.45}
 *{box-sizing:border-box}
 button,input,select{font:inherit;color:inherit}
-.app{display:grid;grid-template-rows:auto 1fr;height:100%;padding-inline:16px;gap:12px;padding-block:12px 0}
+.app{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;height:100%;padding-inline:16px;gap:12px;padding-block:12px 0}
 header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
 h1{font-family:"Bricolage Grotesque","DM Sans",sans-serif;font-weight:800;font-size:clamp(22px,3vw,32px);letter-spacing:-.02em;margin:0;line-height:1;text-wrap:balance}
 h1 span{color:var(--accent)}
@@ -59,7 +59,7 @@ h1 span{color:var(--accent)}
 .chip.toggle[aria-pressed="true"]{border-style:solid;border-color:var(--ink);box-shadow:0 0 0 2px var(--ink) inset}
 .chip.layer i{border-radius:50%;background:var(--c)}
 .chip.layer[aria-pressed="false"]{opacity:.5}
-.main{display:grid;grid-template-columns:1fr 380px;gap:14px;min-height:0;padding-bottom:12px}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px;min-height:0;padding-bottom:12px}
 .mapwrap{position:relative;background:var(--paper);border-radius:22px;overflow:hidden;min-height:420px;box-shadow:var(--shadow);border:1px solid var(--line)}
 #map{position:absolute;inset:0}
 .maplibregl-ctrl-top-right{top:10px;right:10px}
@@ -136,24 +136,43 @@ input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-
 .calc label{font-size:12px}
 .calc input[type=number]{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);width:100%}
 @media (max-width:900px){
-  .app{padding-block:10px 0;gap:8px}
+  .app{padding-block:10px 0;padding-inline:12px;gap:8px}
+  /* The page is a grid. A grid item won't shrink below its content by default, so the two no-wrap chip rows
+     below (area tabs + legend, ~2,000px of chips) used to stretch the whole page to ~2,100px wide -- the map
+     and the info panel ended up off the right edge of a phone. min-width:0 + minmax(0,1fr) lets them shrink
+     to the screen and scroll sideways inside their own row, which is what was intended. */
+  .app>*{min-width:0}
+  header{gap:8px 12px}
   .sub{display:none}
-  .legend{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+  .tools{width:100%;margin-left:0}
+  .search{flex:1 1 150px;min-width:0}
+  .search input[type=text]{width:100%;min-height:44px;font-size:16px} /* 16px keeps iPhones from zooming the page when the box is tapped */
+  .seg{flex:1 1 auto}
+  .seg button{flex:1;min-height:38px;padding:8px 12px}
+  .legend{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   .legend::-webkit-scrollbar{display:none}
-  .chip{white-space:nowrap;flex:none}
-  .main{grid-template-columns:1fr;grid-template-rows:1fr}
+  .chip{white-space:nowrap;flex:none;min-height:38px}
+  .main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
   .mapwrap{min-height:0}
-  .panel{position:fixed;left:8px;right:8px;bottom:0;max-height:62vh;border-radius:22px 22px 0 0;transform:translateY(105%);transition:transform .25s;z-index:30;padding-bottom:env(safe-area-inset-bottom,0px)}
+  .reset{height:40px}
+  .maplibregl-ctrl-group button{width:40px;height:40px}
+  .panel{position:fixed;left:8px;right:8px;bottom:0;max-height:62vh;max-height:62dvh;border-radius:22px 22px 0 0;transform:translateY(105%);transition:transform .25s;z-index:30;padding-bottom:env(safe-area-inset-bottom,0px);overscroll-behavior:contain}
   .panel.open{transform:none}
-  .close{display:block}
-  .ph h2{font-size:22px}
+  .close{display:block;width:40px;height:40px;right:10px;top:12px}
+  .ph{padding:16px 14px 0}
+  .ph h2{font-size:22px;padding-right:44px}
+  .tabs{scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{padding:12px 12px 11px}
+  .body{padding:14px 14px 18px}
+  .kv{grid-template-columns:max-content minmax(0,1fr);gap:8px 12px}
   /* keep the lender disclosures visible on phones too -- just tighter (they're required on every page) */
-  .legalese{font-size:10px;padding:6px 14px 8px;line-height:1.3;max-height:5.5em;overflow:auto}
-  .legalmini{display:block}
+  .legalese{font-size:11px;padding:6px 14px 8px;line-height:1.3;max-height:5.5em;overflow:auto}
+  .legalmini{display:block;font-size:10.5px}
   .zoomhint{display:none}
-  .areas{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;width:100%}
+  .areas{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;width:100%;-webkit-overflow-scrolling:touch}
   .areas::-webkit-scrollbar{display:none}
-  .areas button{white-space:nowrap;flex:none}
+  .areas button{white-space:nowrap;flex:none;min-height:40px;padding:8px 14px}
 }
 </style>
 
@@ -189,7 +208,7 @@ input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-
 
     <aside class="panel" id="panel" aria-live="polite">
       <div id="panelInner"></div>
-      <div class="legalese">Equal Housing Lender. Michael Addison, NMLS #603214, The Federal Savings Bank. Town limits are drawn from Census TIGER; neighborhood lines follow county plat records where the boundary rebuild has run and are otherwise an index; confirm zip, school assignment and taxes by address. Payment figures, when shown, are estimates. Basemap © OpenStreetMap contributors, via OpenFreeMap. Parcel lines and sizes: county appraisal districts via the Texas Geographic Information Office (StratMap), live or a self-hosted quarterly snapshot of the same feed.</div>
+      <div class="legalese">Equal Housing Lender. Michael Addison, NMLS #603214, The Federal Savings Bank. Town limits are drawn from Census TIGER; neighborhood lines follow county plat records where the boundary rebuild has run and are otherwise an index; confirm zip, school assignment and taxes by address. Payment figures, when shown, are estimates. Basemap © OpenStreetMap contributors, via OpenFreeMap. Parcel lines, sizes and values: county appraisal district rolls via the Texas Geographic Information Office (StratMap Land Parcels, CC0), not survey grade; the roll year is shown on each lot.</div>
     </aside>
   </div>
 </div>
@@ -205,8 +224,15 @@ const BUILDS = {established:'Established', teardown:'Teardown / rebuild', custom
 const HOTSPOT_BUILDS = ['custom','teardown','master'];
 const SCHOOL_COLORS = {public:'#3D8BBB', magnet:'#D9A400', charter:'#2E8B6A', private:'#7A5AD9'};
 const GRADE_COLORS = {A:'#1F7A4D', B:'#4C9A6A', C:'#C9A227', D:'#D97B3B', F:'#B3261E'};
-// Parcels: Texas Geographic Information Office StratMap land parcels (every county appraisal district, one feed, no key)
+// Parcels: Texas Geographic Information Office StratMap land parcels (every county appraisal district, one schema, CC0).
+// Primary path (v15): our own tiles, built from TxGIO's bulk county downloads by scripts/build_parcels.py and published
+// next to this page as data/parcels.pmtiles by the "Deploy site" workflow -- same origin, so no CORS, and nothing is looked
+// up live. data/config.json's parcels_pmtiles_url can point somewhere else instead (a CDN bucket, say).
+// Last-resort fallback: TxGIO's live ArcGIS query service. It stopped answering queries in Sept 2026 (its own metadata
+// still claims it can), which is what broke lot clicks and prompted the switch; it stays here only for a visit where the
+// tiles can't load, and the page says plainly when it too is unavailable.
 const PARCELS_URL = 'https://feature.geographic.texas.gov/arcgis/rest/services/Parcels/stratmap_land_parcels_48_most_recent/MapServer/0/query';
+const PARCELS_LOCAL_FILE = 'data/parcels.pmtiles';
 const PARCEL_FIELDS = 'prop_id,geo_id,legal_area,lgl_area_unit,gis_area,gis_area_unit,legal_desc,land_value,imp_value,mkt_value,situs_addr,situs_city,situs_zip,county,year_built,stat_land_use,loc_land_use,source,tax_year';
 const LOTS_MINZOOM = 15;
 
@@ -219,8 +245,8 @@ let hoverGid = null, geoLoaded = false, showLots = true, lotsBusy = null, lotsKe
 let showAerial = false;
 // data/config.json (edit on GitHub, no rebuild): { "esri_api_key": "..." } enables the aerial-imagery toggle;
 // { "parcels_pmtiles_url": "..." } (filled in automatically by the parcels workflow's PR, or pasted in by hand)
-// switches the 'lots' source from a live per-pan TxGIO query to a self-hosted static snapshot -- see switchLotsToStatic()
-const KEYS = { esri: '', parcelsUrl: '' };
+// the 'lots' source normally reads our own parcel tiles (data/parcels.pmtiles) -- see switchLotsToStatic(); the live TxGIO query is the fallback
+const KEYS = { esri: '', parcelsUrl: '', parcelsSource: '' };
 let staticParcelsActive = false;   // true once the self-hosted parcel tiles (if configured) are wired up
 // Esri World Imagery via ArcGIS Location Platform (2M tiles/month free). Attribution text is required by Esri's terms.
 const AERIAL_TILES = key => `https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${encodeURIComponent(key)}`;
@@ -399,8 +425,8 @@ function addLayers(geo){
 //  2) self-hosted -- once data/config.json names a parcels_pmtiles_url, switchLotsToStatic() swaps the SAME
 //     'lots' source for a static vector-tile source built by scripts/build_parcels.py + the parcels workflow.
 //     Vector tiles render themselves as you pan/zoom, so loadLots() becomes a no-op and every county's data
-//     -- including ones with no live query service of their own -- comes from one already-proven feed
-//     (TxGIO StratMap, the same source the live path already used), just refreshed quarterly instead of live.
+//     -- comes from TxGIO's bulk StratMap downloads (the same appraisal-district data the live service carried),
+//     rebuilt whenever TxGIO publishes a new roll. This is the primary path since v15; live is the fallback.
 function liveLotsLayers(){   // the default: an empty geojson source, filled per-viewport by loadLots()
   map.addSource('lots', {type:'geojson', data:{type:'FeatureCollection', features:[]}, promoteId:'prop_id'});
   map.addLayer({id:'lots-fill', type:'fill', source:'lots', minzoom: LOTS_MINZOOM, paint:{
@@ -437,12 +463,21 @@ function switchLotsToStatic(url){
     }}, 'hoods-line');
     ['lots-fill','lots-line'].forEach(id=> map.setLayoutProperty(id,'visibility', showLots?'visible':'none'));
     staticParcelsActive = true;
-    // if the self-hosted file 404s, is malformed, or the release is ever deleted, fall back to the live feed
+    // if the tile file 404s or is malformed (a bad deploy), fall back to the live feed
     // rather than leaving the layer permanently empty for the rest of the visit
     map.on('error', e=>{ if(staticParcelsActive && (e.sourceId==='lots' || (e.error && /pmtiles|PMTiles/.test(String(e.error.message||e.error))))) revertToLiveLots(); });
-    const t=document.getElementById('lotToggle'); if(t) t.title='Show property lines when zoomed in; click a lot for size in acres, square feet and approximate dimensions. Self-hosted snapshot, refreshed quarterly.';
-    if(lotsVisible()) setLotsHint('Parcel lines · self-hosted snapshot');
+    const t=document.getElementById('lotToggle'); if(t) t.title='Show property lines when zoomed in; click a lot for address, size in acres and square feet, value and year built'+(KEYS.parcelsSource?' ('+KEYS.parcelsSource+')':'');
+    if(lotsVisible()) setLotsHint('Click a lot for its address, size and value');
   }catch(e){ console.warn('static parcel tiles unavailable, staying on the live TxGIO feed', e); staticParcelsActive=false; }
+}
+// "2025 appraisal rolls, TxGIO StratMap release of 2025-09, built 2026-09-28" -- from data/parcels_source.json,
+// which scripts/build_parcels.py writes on every real run
+function parcelsSourceText(m){
+  if(!m) return '';
+  const yrs = (m.tax_year_min && m.tax_year_max && m.tax_year_min!==m.tax_year_max) ? m.tax_year_min+'\u2013'+m.tax_year_max : m.tax_year;
+  const roll = yrs ? yrs+' appraisal rolls' : (m.acquisition_date ? 'appraisal rolls as of '+String(m.acquisition_date).slice(0,7) : 'county appraisal rolls');
+  const fb = (m.fallbacks && m.fallbacks.length) ? ' ('+m.fallbacks.join(', ')+' from the prior TxGIO release)' : '';
+  return roll + (m.publication_date ? ', TxGIO StratMap release of '+String(m.publication_date).slice(0,7) : '') + fb + (m.built ? ', built '+m.built : '');
 }
 function trySetupStaticParcels(tries){
   tries = tries || 0;
@@ -452,7 +487,7 @@ function trySetupStaticParcels(tries){
 }
 function lotsVisible(){ return showLots && map.getZoom() >= LOTS_MINZOOM; }
 async function loadLots(){
-  if(staticParcelsActive) return;   // vector tiles render themselves; nothing to fetch per pan
+  if(staticParcelsActive){ setLotsHint(lotsVisible() ? 'Click a lot for its address, size and value' : ''); return; }   // vector tiles render themselves; nothing to fetch per pan
   if(!map.getSource('lots')) return;
   if(!lotsVisible()){ setLotsHint(''); return; }
   const b = map.getBounds(); const pad = 0.0015;
@@ -471,7 +506,7 @@ async function loadLots(){
     if(!gj.features){ throw new Error(gj.error ? gj.error.message : 'no features'); }
     map.getSource('lots').setData(gj);
     setLotsHint(gj.exceededTransferLimit || gj.features.length>=2000 ? 'Dense area: zoom in a little more to see every lot' : (gj.features.length ? gj.features.length+' lots · click one for size' : 'No parcel data here'));
-  }catch(e){ if(e.name!=='AbortError'){ setLotsHint('Lot data unavailable right now'); console.warn('lots', e); } }
+  }catch(e){ if(e.name!=='AbortError'){ setLotsHint(parcelsFallbackDone ? 'Lot data unavailable right now (our parcel tiles and the state\u2019s live feed both failed to load)' : 'Lot data unavailable right now \u2014 the state parcel feed isn\u2019t answering; the self-hosted parcel tiles fix this (README section 7)'); console.warn('lots', e); } }
   finally{ if(ctl===lotsBusy) lotsBusy=null; }
 }
 function setLotsHint(t){ const el=document.getElementById('lotshint'); if(el){ el.textContent=t; el.style.display = t?'':'none'; } }
@@ -496,9 +531,11 @@ function ringArea(r){ let a=0; for(let i=0;i<r.length;i++){ const p=r[i], q=r[(i
 function convexHull(pts){ const P=[...pts].sort((a,b)=>a[0]-b[0]||a[1]-b[1]); const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]); const lo=[]; for(const p of P){ while(lo.length>=2&&cross(lo[lo.length-2],lo[lo.length-1],p)<=0) lo.pop(); lo.push(p);} const up=[]; for(let i=P.length-1;i>=0;i--){ const p=P[i]; while(up.length>=2&&cross(up[up.length-2],up[up.length-1],p)<=0) up.pop(); up.push(p);} up.pop(); lo.pop(); return lo.concat(up); }
 function lotPopupHTML(p, geom){
   const num = v => { const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,'')); return isNaN(n)?null:n; };
-  const unit = String(p.lgl_area_unit||'').toUpperCase(); let acres = num(p.legal_area);
-  if(acres!=null && /S|FT|SQ/.test(unit)) acres = acres/43560;             // some CADs report legal area in sq ft
-  if(acres==null || acres<=0){ const g=num(p.gis_area); const gu=String(p.gis_area_unit||'').toUpperCase(); if(g!=null) acres = /S|FT|SQ/.test(gu)? g/43560 : g; }
+  // some CADs report legal area in sq ft: ACRES/AC vs SQFT/SF/SQ FT/FEET (a bare /S/ test used to match "ACRES" too)
+  const isSqft = u => !!u && !/AC/.test(u) && (/SQ|FT|FEET/.test(u) || u==='SF' || u==='F');
+  const unit = String(p.lgl_area_unit||'').toUpperCase().trim(); let acres = num(p.legal_area);
+  if(acres!=null && isSqft(unit)) acres = acres/43560;
+  if(acres==null || acres<=0){ const g=num(p.gis_area); const gu=String(p.gis_area_unit||'').toUpperCase().trim(); if(g!=null) acres = isSqft(gu)? g/43560 : g; }
   const d = lotDims(geom);
   if((acres==null || acres<=0) && d) acres = d.sqft/43560;
   const sqft = acres!=null ? acres*43560 : null;
@@ -523,7 +560,7 @@ function lotPopupHTML(p, geom){
       ${p.legal_desc?`<span style="color:#5E5A53">Legal</span><span style="font-size:11px">${esc(p.legal_desc)}</span>`:''}
     </div>
     ${links}
-    <small style="margin-top:6px">${esc(p.county||'')} County appraisal district via TxGIO StratMap${p.geo_id?' · '+esc(p.geo_id):''}${staticParcelsActive?' (self-hosted snapshot, refreshed quarterly)':''}. Dimensions are estimated from the parcel outline; verify with a survey.</small>`;
+    <small style="margin-top:6px">${esc(p.county||'')} County appraisal district via TxGIO StratMap${p.geo_id?' · '+esc(p.geo_id):''}${staticParcelsActive&&KEYS.parcelsSource?' · '+esc(KEYS.parcelsSource):''}. Dimensions are estimated from the parcel outline; verify with a survey.</small>`;
 }
 function firstSymbolLayer(){ const ls = map.getStyle().layers; const s = ls.find(l=> l.type==='symbol'); return s ? s.id : undefined; }
 let hoodsSourceData = null;
@@ -761,8 +798,11 @@ async function loadData(){
   try{ const r = await fetch('data/config.json'); if(r.ok){ const c = await r.json();
     if(c.esri_api_key && !/^%%|YOUR/.test(c.esri_api_key)) KEYS.esri = String(c.esri_api_key).trim();
     const t=document.getElementById('aerialToggle'); if(t && KEYS.esri) t.title='Satellite/aerial imagery under the streets once zoomed in (Esri World Imagery)';
-    if(c.parcels_pmtiles_url && !/^%%|YOUR/.test(c.parcels_pmtiles_url)){ KEYS.parcelsUrl = String(c.parcels_pmtiles_url).trim(); trySetupStaticParcels(); }
+    if(c.parcels_pmtiles_url && !/^%%|YOUR/.test(c.parcels_pmtiles_url)) KEYS.parcelsUrl = String(c.parcels_pmtiles_url).trim();
   } }catch(e){}
+  try{ const r = await fetch('data/parcels_source.json'); if(r.ok){ const m = await r.json(); KEYS.parcelsSource = parcelsSourceText(m); } }catch(e){}
+  if(!KEYS.parcelsUrl){ try{ const u = new URL(PARCELS_LOCAL_FILE, location.href).href; const r = await fetch(u, {method:'HEAD'}); if(r.ok) KEYS.parcelsUrl = u; }catch(e){} }
+  if(KEYS.parcelsUrl) trySetupStaticParcels();
   try{ const r = await fetch('data/rate.json'); if(r.ok){ const c = await r.json(); ['rate','down','taxRate','insRate'].forEach(k=>{ if(typeof c[k]==='number') CONFIG[k]=c[k]; }); if(c.asof) CONFIG.asofRate = String(c.asof); } }catch(e){}
   try{ const r = await fetch('data/housing.json'); if(r.ok) HOUSING = await r.json(); }catch(e){}
   try{ const r = await fetch('data/schools.json'); if(r.ok) SCHOOLS = await r.json(); }catch(e){}
