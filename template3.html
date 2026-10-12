@@ -168,7 +168,8 @@ input:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-
   .kv{grid-template-columns:max-content minmax(0,1fr);gap:8px 12px}
   /* keep the lender disclosures visible on phones too -- just tighter (they're required on every page) */
   .legalese{font-size:11px;padding:6px 14px 8px;line-height:1.3;max-height:5.5em;overflow:auto}
-  .legalmini{display:block;font-size:10.5px}
+  /* sits ABOVE the map-credit strip (OpenFreeMap / OSM, ~24px tall, bottom-right) instead of on top of it */
+  .legalmini{display:block;font-size:10.5px;left:8px;right:8px;bottom:32px}
   .zoomhint{display:none}
   .areas{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;width:100%;-webkit-overflow-scrolling:touch}
   .areas::-webkit-scrollbar{display:none}
