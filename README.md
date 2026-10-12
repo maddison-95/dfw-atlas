@@ -371,6 +371,20 @@ about hosting (custom domain, HTTPS, the iframe) is unchanged, and every push or
    into any street: lot lines appear, a click shows the popup, and its footer names the roll year and build
    date from `data/parcels_source.json`.
 
+**If the Action fails with "HTTP Error 403" on the county downloads (this happened on the first runs, Oct 2026).**
+TxGIO's file host (`data.geographic.texas.gov`) refuses GitHub's cloud servers but serves the same files to an
+ordinary home or office connection. The build therefore looks for each county zip on this repo's own
+**`parcels-source` release** first (same file name), and only then asks TxGIO. To supply them:
+1. On your own computer, download the five county zips (about 940 MB in all). The links come from
+   `https://api.tnris.org/api/v1/resources/?collection_id=<newest Land Parcels collection>&area_type=county` — the
+   `resource` field of the Dallas (48113), Collin (48085), Denton (48121), Tarrant (48439) and Rockwall (48397)
+   rows, named like `stratmap26-landparcels_48113_lp.zip`. Keep the file names exactly as downloaded.
+2. Repo → **Releases → Draft a new release** → *Choose a tag*: type `parcels-source` and pick "Create new tag" →
+   title "TxGIO county zips (mirror)" → drag the five zips into the box → **Publish release**.
+3. Re-run **Refresh parcel data** (both boxes unticked).
+When TxGIO publishes the next yearly release the file names change (`stratmap27-…`), so a stale mirror is never
+used by mistake; repeat steps 1–3 then (or the build may be able to reach TxGIO directly by then).
+
 After that it's automatic: the parcels Action checks quarterly whether TxGIO has published a newer release
 and rebuilds only if so (tick "Force" to rebuild regardless — after a script change, for instance).
 

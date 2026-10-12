@@ -162,6 +162,38 @@ def download(url, dest):
     raise RuntimeError(f'download failed after {RETRIES} tries: {last}\n  {url}')
 
 
+# TxGIO's file host (data.geographic.texas.gov) answers 403 to GitHub's cloud servers while serving the very same
+# files to ordinary home/office connections (confirmed 2026-10-12: Actions run #3 and a dry run both got 403; a
+# browser on a normal connection got 200 for all five county zips). So the build also looks for each county zip on
+# this repo's own "parcels-source" release, under the identical file name, BEFORE asking TxGIO. To use it: download
+# the five county zips in a browser and attach them to a release tagged parcels-source (README, section 7).
+# The file name carries TxGIO's release year (stratmap26-...), so a mirrored file can never be mistaken for a newer
+# or older roll: when TxGIO publishes the next one the name changes, nothing matches, and the build asks TxGIO again.
+MIRROR_TAG = 'parcels-source'
+
+
+def mirror_url(url):
+    base = os.environ.get('PARCEL_MIRROR_BASE')
+    if not base:
+        repo = os.environ.get('GITHUB_REPOSITORY') or 'maddison-95/dfw-atlas'
+        base = f'https://github.com/{repo}/releases/download/{MIRROR_TAG}'
+    return base.rstrip('/') + '/' + os.path.basename(urllib.parse.urlparse(url).path)
+
+
+def fetch_zip(url, dest):
+    """One county zip: this repo's mirror first (same file name), then TxGIO itself."""
+    errs = []
+    for u, label in ((mirror_url(url), f'repo "{MIRROR_TAG}" release'), (url, 'TxGIO')):
+        try:
+            got = download(u, dest)
+            log(f'    downloaded from {label}')
+            return got
+        except RuntimeError as e:
+            errs.append(f'{label}: {str(e).splitlines()[0]}')
+    raise RuntimeError(' | '.join(errs) + f' -- TxGIO refuses GitHub\'s servers; attach {os.path.basename(url)} to the '
+                       f'"{MIRROR_TAG}" release of this repo (downloaded in a browser) and re-run')
+
+
 def unpack(zip_path, into):
     os.makedirs(into, exist_ok=True)
     with zipfile.ZipFile(zip_path) as z:
@@ -340,7 +372,7 @@ def main():
         c, res = min(plan, key=lambda t: t[1]['bytes'] or 1e18)
         log(f'\nDownloading the smallest county ({c}) to check the schema...')
         work = os.path.join(args.work, f'parcels_{c.lower()}'); os.makedirs(work, exist_ok=True)
-        zp = res['url'] if c in local else download(res['url'], os.path.join(work, 'src.zip'))
+        zp = res['url'] if c in local else fetch_zip(res['url'], os.path.join(work, 'src.zip'))
         src = unpack(zp, os.path.join(work, 'x'))
         import io
         buf = io.StringIO(); n, rep = convert(src, c, buf, limit=3)
@@ -357,7 +389,7 @@ def main():
         if zp_or_none is None:
             res = county_resource(release['collection_id'], c)
             log(f'{c}: downloading {res["url"]} ({(res["bytes"] or 0)/1e6:,.0f} MB)')
-            zp = download(res['url'], os.path.join(work, f'src_{release["collection_id"][:8]}.zip'))
+            zp = fetch_zip(res['url'], os.path.join(work, f'src_{release["collection_id"][:8]}.zip'))
         else:
             zp = zp_or_none
         src = unpack(zp, os.path.join(work, 'x_' + release['collection_id'][:8] if release else 'x_local'))
