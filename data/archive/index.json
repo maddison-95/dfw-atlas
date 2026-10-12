@@ -2,7 +2,10 @@
  "note": "Dated copies of the live data files, one folder per month, written by scripts/keep_last_good.py after each accepted refresh. To roll back: copy a file from here over data/<file> and commit.",
  "months": {
   "2026-10": [
-   "lot_stats.json"
+   "hmda_stats.json",
+   "housing.json",
+   "lot_stats.json",
+   "schools.json"
   ]
  }
 }
